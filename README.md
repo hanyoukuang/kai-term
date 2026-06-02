@@ -24,7 +24,7 @@ Requires Python 3.12.13+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/hanyoukuang/kai-term.git
-cd kai
+cd kai-term
 uv sync
 ```
 
