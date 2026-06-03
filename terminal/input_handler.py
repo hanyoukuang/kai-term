@@ -70,9 +70,6 @@ class InputHandler:
             return None
 
         # --- Ctrl+key → C0 control codes (0x00-0x1F) ---
-        # On macOS, Ctrl maps to Qt.MetaModifier (Cmd is ControlModifier).
-        # When IME is active, event.text() may be empty for Ctrl+key,
-        # so derive the C0 code from the key code when needed.
         if sys.platform == "darwin":
             ctrl_pressed = bool(modifiers & Qt.MetaModifier)
         else:
