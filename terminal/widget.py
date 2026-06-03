@@ -1,10 +1,11 @@
 from par_term_emu_core_rust import PtyTerminal, CursorStyle, UnderlineStyle, Terminal
 from PySide6.QtWidgets import QWidget, QApplication, QMenu
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, QRectF
 from PySide6.QtGui import (
     QPainter, QFont, QFontMetrics, QColor,
     QKeyEvent, QPaintEvent, QResizeEvent,
     QWheelEvent, QMouseEvent, QAction,
+    QInputMethodEvent,
 )
 import sys
 from .input_handler import InputHandler
@@ -70,9 +71,11 @@ class TerminalWidget(QWidget):
         self._sel_start: tuple[int, int] | None = None
         self._sel_end: tuple[int, int] | None = None
         self._selecting = False
+        self._preedit = ""
 
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WA_InputMethodEnabled, True)
         self.setMinimumSize(self._cell_w * 20, self._cell_h * 5)
         self.setMouseTracking(True)
 
@@ -147,6 +150,8 @@ class TerminalWidget(QWidget):
 
         if self._scroll_offset == 0:
             self._draw_cursor(painter)
+            if self._preedit:
+                self._draw_preedit(painter)
 
         if self._unseen_output and self._scroll_offset > 0:
             indicator_w = self._cell_w * 3
@@ -344,6 +349,24 @@ class TerminalWidget(QWidget):
             painter.fillRect(x, y, 2, self._cell_h, self.DEFAULT_FG)
         else:
             painter.fillRect(x, y, self._cell_w, self._cell_h, self.DEFAULT_FG)
+
+    def _draw_preedit(self, painter: QPainter) -> None:
+        try:
+            cx, cy = self._term.cursor_position()
+        except Exception:
+            return
+        if not (0 <= cy < self._rows and 0 <= cx < self._cols):
+            return
+
+        x = cx * self._cell_w
+        y = cy * self._cell_h
+        painter.setFont(self._font)
+        painter.setPen(self.DEFAULT_FG)
+        painter.drawText(x, int(y + self._fm.ascent()), self._preedit)
+
+        preedit_w = len(self._preedit) * self._cell_w
+        ul_y = y + self._cell_h - 2
+        painter.drawLine(x, int(ul_y), x + preedit_w, int(ul_y))
 
     # ── Selection ────────────────────────────────────────────────────────
 
@@ -569,6 +592,24 @@ class TerminalWidget(QWidget):
             data = InputHandler.encode(event)
             if data:
                 self._term.write(data)
+
+    def inputMethodEvent(self, event: QInputMethodEvent) -> None:
+        commit = event.commitString()
+        if commit:
+            self._term.write_str(commit)
+        self._preedit = event.preeditString()
+        self.update()
+
+    def inputMethodQuery(self, query: Qt.InputMethodQuery):
+        if query == Qt.ImCursorRectangle:
+            try:
+                cx, cy = self._term.cursor_position()
+            except Exception:
+                return QRectF()
+            x = cx * self._cell_w
+            y = cy * self._cell_h
+            return QRectF(x, y, self._cell_w, self._cell_h)
+        return None
 
     # ── Resize ────────────────────────────────────────────────────────────
 
