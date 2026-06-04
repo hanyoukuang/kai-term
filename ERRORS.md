@@ -15,6 +15,7 @@
 | 5 | 06-03 | Phase 5 | 内容只占窗口 1/4，仅左上角显示 | QPixmap 双缓冲在 Retina 屏上的 devicePixelRatio 行为异常，导致渲染区域为实际窗口的 1/2 宽 × 1/2 高 = 1/4 | 移除 QPixmap，直接 render 到 Widget 的 QPainter（paintEvent 中），Qt 自动处理 DPR |
 | 6 | 06-03 | Phase 5 | 彩色背景的"空格"单元格不显示背景色 | `_draw_row` 中背景填充在空格跳过逻辑之后 | 将 bg fillRect 移到空格判断之前 |
 | 7 | 06-03 | Phase 5 | nano 上方标题栏/下方提示栏纯白色背景不显示 | `attrs.reverse` (SGR 7) 未被渲染层处理。Rust 引擎不预交换 fg/bg，需要渲染层自己交换 | 在 `_render_cells` 中添加 `attrs.reverse` 检测，为 True 时交换 fg/bg（含默认值处理） |
+| 8 | 06-04 | Phase 6 | 鼠标拖拽选择文字后：(1) 高亮不消失 (2) 无复制横幅/通知 | `_copy_selection()` 只写系统剪贴板，之后未调用 `_clear_selection()`；无任何通知机制（无 Signal、无 toast、无 IPC） | 见下方详细分析 |
 
 ---
 
@@ -30,7 +31,8 @@
 
 ### par-term-emu-core-rust (Rust 解析器)
 
-- [ ] `PtyTerminal.resize(rows, cols)` 参数顺序是 `(rows, cols)`，不是 `(cols, rows)`
+- [ ] `PtyTerminal` 没有 `clear_selection`/`set_selection`/`get_selected_text` — 选择 API 仅存在于 headless `Terminal` 类
+- [ ] `PtyTerminal` 与 `Terminal` 不是继承关系，是两个独立类
 - [ ] `damage_regions_since(gen)` 返回 `list[(int, int)]` — 每个元素是 `(start_row, end_row)`
 - [ ] `get_cell_char(row, col)` 返回的可能不是纯 ASCII，包含 Unicode 字符
 - [ ] `get_fg_color(row, col)` / `get_bg_color(row, col)` 返回 `(R, G, B)` 元组或 None
@@ -55,3 +57,45 @@
 - [ ] `event.key()` vs `event.text()` — 前者是键码，后者是文本
 - [ ] `QFontMetrics.height()` 包含行间距，`lineSpacing()` 可能更合适
 - [ ] QPixmap 需要满足大小 `(cols * cell_w, rows * cell_h)`，resize 时重建
+
+---
+
+## 错误 #8 详细分析：选择高亮不消失 + 无复制横幅
+
+### 问题描述
+
+鼠标拖拽选择文字（A→B），释放后：文字被复制到系统剪贴板 ✅，但：
+1. 选择高亮（灰色背景）不消失
+2. 没有任何视觉通知（横幅/toast/弹窗）
+
+### 根因
+
+`_copy_selection()`（widget.py 行 527-530）只做了：
+
+```python
+def _copy_selection(self) -> None:
+    text = self._selected_text()
+    if text:
+        QApplication.clipboard().setText(text)  # ← 仅此而已
+```
+
+缺少三项关键操作：
+1. **未调用 `_clear_selection()`** — 高亮不消失
+2. **无信号** — 同进程宿主应用无法感知复制事件
+3. **无跨进程通知** — 独立进程宿主应用无法感知
+
+### 已探索但回滚的修复方案
+
+| 方案 | 问题 |
+|------|------|
+| 纯 Qt Signal (`selection_copied`) | 跨进程无效 |
+| Rust Terminal API 替换 Python 选择 | PtyTerminal 无选择 API |
+| 临时文件 IPC (`/tmp/pyqterminal_copy`) | 单向通信，无法让宿主回调清除 |
+| 终端内 PySide6 toast 横幅 | 与宿主应用横幅冲突 |
+
+### 待解决问题
+
+- [ ] OpenCode 与 pyqterminal 的嵌入方式未确认（同进程 vs 独立进程）
+- [ ] 同进程：需 `selection_copied` Signal + `clear_selection()` 公开方法
+- [ ] 跨进程：需自定义 DCS escape 序列或双向 IPC 通道
+- [ ] 终端内 toast 与宿主应用横幅的冲突/重复问题
