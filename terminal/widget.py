@@ -1,4 +1,4 @@
-from par_term_emu_core_rust import PtyTerminal, CursorStyle, UnderlineStyle, Terminal
+from par_term_emu_core_rust import PtyTerminal, CursorStyle, UnderlineStyle, Terminal, MouseEncoding
 from PySide6.QtWidgets import QWidget, QApplication, QMenu
 from PySide6.QtCore import QTimer, Qt, QRectF, Signal
 from PySide6.QtGui import (
@@ -667,10 +667,10 @@ class TerminalWidget(QWidget):
         if modifiers & Qt.ControlModifier:
             code += 16
         try:
-            enc = self._term.mouse_encoding().name  # "Default" or "Sgr"
+            is_sgr = self._term.mouse_encoding() == MouseEncoding.Sgr
         except Exception:
-            enc = "Default"
-        if "Sgr" in enc:
+            is_sgr = False
+        if is_sgr:
             seq = f"\x1b[<{code};{col + 1};{row + 1}{'M' if pressed else 'm'}".encode()
         else:
             seq = b"\x1b[M" + bytes([code + 32]) + bytes([col + 32]) + bytes([row + 32])
@@ -681,6 +681,7 @@ class TerminalWidget(QWidget):
         row = int(event.position().y() // self._cell_h)
         if self._mouse_tracking_active() and not (event.modifiers() & Qt.ShiftModifier):
             self._send_mouse_event(event, True)
+            return
 
         if event.button() == Qt.LeftButton and (event.modifiers() & Qt.ControlModifier):
             link = self._hyperlink_at(col, row)
