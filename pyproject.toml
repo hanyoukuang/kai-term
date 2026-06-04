@@ -7,7 +7,7 @@ license = { text = "MIT" }
 authors = [
     { name = "Kaihong Han" },
 ]
-requires-python = ">=3.12.13"
+requires-python = ">=3.12"
 dependencies = [
     "par-term-emu-core-rust>=0.42",
     "pyside6>=6.11.1",
