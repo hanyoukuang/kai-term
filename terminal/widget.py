@@ -327,6 +327,7 @@ class TerminalWidget(QWidget):
                       painter.font(), char)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(*fg_rgb))
+        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.drawPath(path)
 
     @staticmethod
