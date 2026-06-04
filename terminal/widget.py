@@ -190,6 +190,7 @@ class TerminalWidget(QWidget):
             if self._term.has_notifications():
                 for title, msg in self._term.drain_notifications():
                     self.notification_received.emit(title or "", msg)
+                    self._os_notify(title or "", msg)
         except Exception:
             pass
 
@@ -203,6 +204,22 @@ class TerminalWidget(QWidget):
                     if (state, val) != self._prev_progress:
                         self._prev_progress = (state, val)
                         self.progress_changed.emit(state, val)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _os_notify(title: str, message: str) -> None:
+        import subprocess
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(
+                    ["osascript", "-e",
+                     f'display notification "{message}" with title "{title or "Terminal"}"'],
+                    capture_output=True, timeout=3)
+            elif sys.platform == "linux":
+                subprocess.run(
+                    ["notify-send", title or "Terminal", message],
+                    capture_output=True, timeout=3)
         except Exception:
             pass
 
