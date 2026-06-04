@@ -1,9 +1,9 @@
-# Kai
+# pyqterminal
 
 A cross-platform terminal emulator — Python frontend, Rust backend.
 
 <p align="center">
-  <img src="screenshot.png" alt="Kai Terminal Screenshot" width="720">
+  <img src="screenshot.png" alt="pyqterminal Screenshot" width="720">
 </p>
 
 ## Features
@@ -23,8 +23,8 @@ A cross-platform terminal emulator — Python frontend, Rust backend.
 Requires Python 3.12.13+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/hanyoukuang/kai-term.git
-cd kai-term
+git clone https://github.com/hanyoukuang/pyqterminal.git
+cd pyqterminal
 uv sync
 ```
 
@@ -38,10 +38,10 @@ uv run python main.py
 
 ### Display-only mode
 
-Use Kai as a pure terminal display — pipe escape sequences from external sources (SSH, logs, etc.) without a local shell:
+Use pyqterminal as a pure terminal display — pipe escape sequences from external sources (SSH, logs, etc.) without a local shell:
 
 ```bash
-# Pipe ANSI output to Kai
+# Pipe ANSI output to pyqterminal
 echo -e '\x1b[31mHello\x1b[0m\n\x1b[7mReverse\x1b[0m' | uv run python main.py --display
 
 # Display SSH session output

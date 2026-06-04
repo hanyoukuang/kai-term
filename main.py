@@ -1,4 +1,4 @@
-"""Kai - A cross-platform terminal emulator with Rust backend and PySide6 frontend.
+"""pyqterminal - A cross-platform terminal emulator with Rust backend and PySide6 frontend.
 
 Usage:
   python main.py                    Interactive mode (default)
@@ -15,16 +15,17 @@ from terminal.widget import TerminalWidget
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Kai Terminal Emulator")
+    parser = argparse.ArgumentParser(description="pyqterminal Terminal Emulator")
     parser.add_argument("--display", action="store_true",
                         help="Display-only mode (reads escape sequences from stdin)")
     args = parser.parse_args()
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Kai")
+    app.setApplicationName("pyqterminal")
+    app.setApplicationDisplayName("pyqterminal")
 
     widget = TerminalWidget(rows=24, cols=80, display_only=args.display)
-    widget.setWindowTitle("Kai" if not args.display else "Kai (display-only)")
+    widget.setWindowTitle("pyqterminal" if not args.display else "pyqterminal (display-only)")
     widget.resize(640, 480)
     widget.show()
 
