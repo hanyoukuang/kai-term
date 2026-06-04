@@ -70,6 +70,7 @@ class TerminalWidget(QWidget):
         self._generation = 0
         self._display_only = display_only
         self._prev_title = ""
+        self._prev_clipboard = ""
 
         self._font_bold = QFont(self._font)
         self._font_bold.setBold(True)
@@ -152,6 +153,18 @@ class TerminalWidget(QWidget):
             if title and title != self._prev_title:
                 self._prev_title = title
                 self.title_changed.emit(title)
+        except Exception:
+            pass
+
+        # Bridge OSC 52 clipboard writes to the system clipboard.
+        # Terminal apps (vim, OpenCode, etc.) send \x1b]52;c;BASE64\x07
+        # which the Rust backend stores internally.  We pull it out and
+        # put it in QApplication.clipboard() so Cmd+V / Ctrl+Shift+V works.
+        try:
+            text = self._term.clipboard()
+            if text and text != self._prev_clipboard:
+                self._prev_clipboard = text
+                QApplication.clipboard().setText(text)
         except Exception:
             pass
 
