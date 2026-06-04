@@ -131,6 +131,7 @@ class TerminalWidget(QWidget):
         if not self._display_only:
             raise RuntimeError("feed() only available in display-only mode")
         self._term.process_str(data)
+        self._bridge_osc()
         self.update()
 
     @property
@@ -155,6 +156,9 @@ class TerminalWidget(QWidget):
                 self._unseen_output = True
                 self.update()
 
+        self._bridge_osc()
+
+    def _bridge_osc(self) -> None:
         try:
             title = self._term.title()
             if title and title != self._prev_title:
