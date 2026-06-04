@@ -87,6 +87,8 @@ class TerminalWidget(QWidget):
         self._sel_start: tuple[int, int] | None = None
         self._sel_end: tuple[int, int] | None = None
         self._selecting = False
+        self._was_drag = False
+        self._pending_mouse_press: QMouseEvent | None = None
         self._preedit = ""
 
         self.setFocusPolicy(Qt.StrongFocus)
@@ -562,20 +564,26 @@ class TerminalWidget(QWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         col = int(event.position().x() // self._cell_w)
         row = int(event.position().y() // self._cell_h)
-        if self._mouse_tracking_active() and not (event.modifiers() & Qt.ShiftModifier):
-            self._send_mouse_event(event, True)
+        self._was_drag = False
+        self._pending_mouse_press = None
         if event.button() == Qt.LeftButton:
             self._clear_selection()
             self._sel_start = (row, col)
             self._sel_end = (row, col)
             self._selecting = True
             self.setCursor(Qt.IBeamCursor)
+            # Save press info — only forward to PTY if this turns out
+            # to be a click (not a drag that became a selection).
+            if self._mouse_tracking_active() and not (event.modifiers() & Qt.ShiftModifier):
+                self._pending_mouse_press = event
         elif event.button() == Qt.MiddleButton:
             if not self._display_only:
                 text = QApplication.clipboard().text()
                 if text:
                     self._term.write_str(text)
         else:
+            if self._mouse_tracking_active():
+                self._send_mouse_event(event, True)
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -584,21 +592,32 @@ class TerminalWidget(QWidget):
                        int(event.position().x() // self._cell_w)))
             row = max(0, min(self._rows - 1,
                        int(event.position().y() // self._cell_h)))
-            self._sel_end = (row, col)
+            if (row, col) != self._sel_end:
+                self._sel_end = (row, col)
+                self._was_drag = True
+                self._pending_mouse_press = None
             self.update()
+        elif self._mouse_tracking_active() and event.buttons():
+            self._send_mouse_event(event, True)
         else:
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if self._mouse_tracking_active():
-            self._send_mouse_event(event, False)
         if event.button() == Qt.LeftButton and self._selecting:
             self._selecting = False
             self.setCursor(Qt.ArrowCursor)
-            if self._sel_start != self._sel_end:
+            if self._was_drag:
                 self._copy_selection()
+                # Don't forward to PTY — it was a text selection, not a click
+            elif self._pending_mouse_press:
+                # It was a real click — forward press + release to PTY
+                self._send_mouse_event(self._pending_mouse_press, True)
+                self._send_mouse_event(event, False)
+                self._pending_mouse_press = None
             else:
                 self._clear_selection()
+        elif self._mouse_tracking_active():
+            self._send_mouse_event(event, False)
         else:
             super().mouseReleaseEvent(event)
 
