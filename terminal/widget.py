@@ -5,7 +5,7 @@ from PySide6.QtGui import (
     QPainter, QFont, QFontMetrics, QColor,
     QKeyEvent, QPaintEvent, QResizeEvent,
     QWheelEvent, QMouseEvent, QAction,
-    QInputMethodEvent,
+    QInputMethodEvent, QPainterPath,
 )
 import sys
 from .input_handler import InputHandler
@@ -294,12 +294,10 @@ class TerminalWidget(QWidget):
                 pass  # drawn as filled rect — seamless, no gaps
             elif is_block:
                 painter.setClipRect(x, y, cell_w, self._cell_h)
-                painter.setPen(QColor(*fg_rgb))
-                painter.drawText(x, int(y + self._fm.ascent()), char)
+                self._draw_text_path(painter, char, x, y, fg_rgb)
             else:
                 painter.setClipRect(x - 2, y - 2, cell_w + 4, self._cell_h + 4)
-                painter.setPen(QColor(*fg_rgb))
-                painter.drawText(x, int(y + self._fm.ascent()), char)
+                self._draw_text_path(painter, char, x, y, fg_rgb)
 
             if attrs and attrs.strikethrough:
                 mid_y = y + self._cell_h // 2
@@ -313,6 +311,23 @@ class TerminalWidget(QWidget):
             painter.restore()
 
         painter.setFont(self._font)
+
+    @staticmethod
+    def _draw_text_path(painter: QPainter, char: str, x: int, y: int,
+                         fg_rgb: tuple) -> None:
+        """Draw a single character via QPainterPath for proper glyph counters.
+
+        QPainter.drawText() may fill glyph counters (holes) on some platforms
+        when the font's contour winding doesn't match the renderer's expectation.
+        QPainterPath.addText() + drawPath() uses the even-odd fill rule,
+        preserving counter shapes in Nerd Font icons and other glyphs.
+        """
+        path = QPainterPath()
+        path.addText(x, int(y + painter.fontMetrics().ascent()),
+                      painter.font(), char)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(*fg_rgb))
+        painter.drawPath(path)
 
     @staticmethod
     def _draw_block_fill(painter: QPainter, char: str, x: int, y: int,
