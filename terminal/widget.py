@@ -606,6 +606,12 @@ class TerminalWidget(QWidget):
         text = self._selected_text()
         if text:
             QApplication.clipboard().setText(text)
+            self.selection_copied.emit(text)
+            try:
+                with open("/tmp/pyqterminal_copy", "w") as f:
+                    f.write(text)
+            except OSError:
+                pass
 
     def _clear_selection(self) -> None:
         self._sel_start = None
@@ -723,10 +729,8 @@ class TerminalWidget(QWidget):
             self._selecting = False
             self.setCursor(Qt.ArrowCursor)
             if self._sel_start != self._sel_end:
-                text = self._selected_text()
-                if text:
-                    QApplication.clipboard().setText(text)
-                    self.selection_copied.emit(text)
+                self._copy_selection()
+                self._clear_selection()
             else:
                 self._clear_selection()
         else:
