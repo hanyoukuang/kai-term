@@ -35,8 +35,11 @@ class TerminalWidget(QWidget):
     # Signals — connect to react to terminal events in embedding applications.
     title_changed = Signal(str)    # Shell changed the window title
     process_exited = Signal(int)   # Shell process exited with return code
-    bell_rang = Signal()             # Terminal bell (ASCII BEL, \x07)
-    selection_copied = Signal(str)   # Selection text copied, host may react
+    bell_rang = Signal()              # Terminal bell (ASCII BEL, \x07)
+    selection_copied = Signal(str)    # Selection text copied, host may react
+    notification_received = Signal(str, str)  # OSC 9/777 notification (title, message)
+    cwd_changed = Signal(str)         # OSC 7 current directory changed
+    progress_changed = Signal(int, int)  # OSC 9;4 progress (state, value 0-100)
 
     DEFAULT_FG = QColor(192, 192, 192)
     DEFAULT_BG = QColor(0, 0, 0)
@@ -72,6 +75,8 @@ class TerminalWidget(QWidget):
         self._display_only = display_only
         self._prev_title = ""
         self._prev_clipboard = ""
+        self._prev_cwd = ""
+        self._prev_progress = (-1, -1)
 
         self._font_bold = QFont(self._font)
         self._font_bold.setBold(True)
@@ -85,6 +90,7 @@ class TerminalWidget(QWidget):
             self._term = Terminal(self._cols, self._rows)
         else:
             self._term = PtyTerminal(self._cols, self._rows)
+            self._term.set_accept_osc7(True)
 
         self._sel_start: tuple[int, int] | None = None
         self._sel_end: tuple[int, int] | None = None
@@ -157,15 +163,42 @@ class TerminalWidget(QWidget):
         except Exception:
             pass
 
-        # Bridge OSC 52 clipboard writes to the system clipboard.
-        # Terminal apps (vim, OpenCode, etc.) send \x1b]52;c;BASE64\x07
-        # which the Rust backend stores internally.  We pull it out and
-        # put it in QApplication.clipboard() so Cmd+V / Ctrl+Shift+V works.
+        # OSC 52 clipboard bridge
         try:
             text = self._term.clipboard()
             if text and text != self._prev_clipboard:
                 self._prev_clipboard = text
                 QApplication.clipboard().setText(text)
+        except Exception:
+            pass
+
+        # OSC 7 current directory
+        try:
+            cwd = self._term.current_directory()
+            if cwd and cwd != self._prev_cwd:
+                self._prev_cwd = cwd
+                self.cwd_changed.emit(cwd)
+        except Exception:
+            pass
+
+        # OSC 9/777 notifications
+        try:
+            if self._term.has_notifications():
+                for title, msg in self._term.drain_notifications():
+                    self.notification_received.emit(title or "", msg)
+        except Exception:
+            pass
+
+        # OSC 9;4 progress bar
+        try:
+            if self._term.has_progress():
+                bar = self._term.progress_bar()
+                if bar:
+                    state = bar.state.value if hasattr(bar.state, 'value') else int(bar.state)
+                    val = int(bar.value)
+                    if (state, val) != self._prev_progress:
+                        self._prev_progress = (state, val)
+                        self.progress_changed.emit(state, val)
         except Exception:
             pass
 
@@ -217,7 +250,7 @@ class TerminalWidget(QWidget):
             return
         if not cells:
             return
-        self._render_cells(painter, cells, y, display_row)
+        self._render_cells(painter, cells, y, display_row, sb_idx)
 
     def _draw_live_row(self, painter: QPainter,
                         live_row: int, y: int) -> None:
@@ -228,10 +261,11 @@ class TerminalWidget(QWidget):
         except Exception:
             return
         display_row = live_row + self._scroll_offset
-        self._render_cells(painter, cells, y, display_row)
+        self._render_cells(painter, cells, y, display_row, live_row)
 
     def _render_cells(self, painter: QPainter, cells: list,
-                       y: int, display_row: int) -> None:
+                       y: int, display_row: int,
+                       buffer_row: int = -1) -> None:
         cell_data: list[dict] = []
         for col, (char, fg, bg, attrs) in enumerate(cells):
             if col >= self._cols:
@@ -255,11 +289,18 @@ class TerminalWidget(QWidget):
             bg_rgb = eff_bg if eff_bg else (0, 0, 0)
             selected = self._cell_in_selection(display_row, col)
 
+            hyperlink = ""
+            if buffer_row >= 0:
+                try:
+                    hyperlink = self._term.get_hyperlink(col, buffer_row) or ""
+                except Exception:
+                    pass
+
             cell_data.append({
                 'x': x, 'cell_w': cell_w, 'char': char,
                 'eff_fg': eff_fg, 'bg_rgb': bg_rgb,
                 'selected': selected, 'attrs': attrs,
-                'is_space': is_space,
+                'is_space': is_space, 'hyperlink': hyperlink,
             })
 
         for d in cell_data:
@@ -321,6 +362,11 @@ class TerminalWidget(QWidget):
                 base_y = y + self._fm.ascent() + 2
                 ul_style = attrs.underline_style
                 self._draw_underline(painter, x, base_y, cell_w, ul_style)
+
+            if d.get('hyperlink'):
+                link_y = y + self._fm.ascent() + 2
+                painter.setPen(QColor(80, 160, 255))
+                painter.drawLine(x, int(link_y), x + cell_w, int(link_y))
 
             painter.restore()
 
@@ -549,6 +595,18 @@ class TerminalWidget(QWidget):
         """Clear the selection highlight. Callable by host applications."""
         self._clear_selection()
 
+    def _hyperlink_at(self, col: int, row: int) -> str:
+        live_row = row - self._scroll_offset
+        try:
+            if live_row < 0:
+                sb_idx = self._term.scrollback_len() + live_row
+                return ""  # scrollback hyperlinks not yet supported
+            elif live_row < self._rows:
+                return self._term.get_hyperlink(col, live_row) or ""
+        except Exception:
+            pass
+        return ""
+
     # ── Mouse events ─────────────────────────────────────────────────────
 
     def _mouse_tracking_active(self) -> bool:
@@ -602,6 +660,14 @@ class TerminalWidget(QWidget):
         row = int(event.position().y() // self._cell_h)
         if self._mouse_tracking_active() and not (event.modifiers() & Qt.ShiftModifier):
             self._send_mouse_event(event, True)
+
+        if event.button() == Qt.LeftButton and (event.modifiers() & Qt.ControlModifier):
+            link = self._hyperlink_at(col, row)
+            if link:
+                import webbrowser
+                webbrowser.open(link)
+                return
+
         if event.button() == Qt.LeftButton:
             self._clear_selection()
             self._sel_start = (row, col)
@@ -627,6 +693,12 @@ class TerminalWidget(QWidget):
         elif self._mouse_tracking_active() and event.buttons():
             self._send_mouse_event(event, True, motion=True)
         else:
+            col = int(event.position().x() // self._cell_w)
+            row = int(event.position().y() // self._cell_h)
+            if self._hyperlink_at(col, row):
+                self.setCursor(Qt.PointingHandCursor)
+            else:
+                self.setCursor(Qt.ArrowCursor)
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
