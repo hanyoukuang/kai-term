@@ -1,6 +1,6 @@
 from par_term_emu_core_rust import PtyTerminal, CursorStyle, UnderlineStyle, Terminal
 from PySide6.QtWidgets import QWidget, QApplication, QMenu
-from PySide6.QtCore import QTimer, Qt, QRectF
+from PySide6.QtCore import QTimer, Qt, QRectF, Signal
 from PySide6.QtGui import (
     QPainter, QFont, QFontMetrics, QColor,
     QKeyEvent, QPaintEvent, QResizeEvent,
@@ -32,15 +32,30 @@ def _pick_monospace_font(size: int = 13) -> QFont:
 
 
 class TerminalWidget(QWidget):
+    # Signals — connect to react to terminal events in embedding applications.
+    title_changed = Signal(str)    # Shell changed the window title
+    process_exited = Signal(int)   # Shell process exited with return code
+    bell_rang = Signal()          # Terminal bell (ASCII BEL, \x07)
+
     DEFAULT_FG = QColor(192, 192, 192)
     DEFAULT_BG = QColor(0, 0, 0)
     SELECTION_BG = QColor(80, 80, 80)
 
     def __init__(self, parent=None, rows: int = 24, cols: int = 80,
-                 display_only: bool = False):
+                 display_only: bool = False,
+                 font_family: str | None = None,
+                 font_size: int = 13):
         super().__init__(parent)
 
-        self._font = _pick_monospace_font(13)
+        self._font_family = font_family
+        self._font_size = font_size
+
+        if font_family:
+            self._font = QFont(font_family, font_size)
+            self._font.setStyleHint(QFont.Monospace)
+            self._font.setHintingPreference(QFont.PreferFullHinting)
+        else:
+            self._font = _pick_monospace_font(font_size)
         self._fm = QFontMetrics(self._font)
         self._cell_w = int(max(self._fm.horizontalAdvance("M"), 1))
         self._cell_h = int(max(self._fm.height(), 1))
@@ -54,6 +69,7 @@ class TerminalWidget(QWidget):
         self._blink_visible = True
         self._generation = 0
         self._display_only = display_only
+        self._prev_title = ""
 
         self._font_bold = QFont(self._font)
         self._font_bold.setBold(True)
@@ -133,8 +149,9 @@ class TerminalWidget(QWidget):
 
         try:
             title = self._term.title()
-            if title and title != self.windowTitle():
-                self.setWindowTitle(title)
+            if title and title != self._prev_title:
+                self._prev_title = title
+                self.title_changed.emit(title)
         except Exception:
             pass
 
@@ -176,8 +193,8 @@ class TerminalWidget(QWidget):
 
     def _draw_scrollback_row(self, painter: QPainter,
                               display_row: int, y: int) -> None:
-        sb_idx = self._scroll_offset - display_row - 1
         sb_len = self._term.scrollback_len()
+        sb_idx = sb_len - self._scroll_offset + display_row
         if sb_idx < 0 or sb_idx >= sb_len:
             return
         try:
@@ -272,13 +289,17 @@ class TerminalWidget(QWidget):
             painter.save()
 
             is_block = len(char) == 1 and 0x2580 <= ord(char) <= 0x259F
-            if is_block:
+            if is_block and self._draw_block_fill(painter, char, x, y,
+                                                   cell_w, self._cell_h, fg_rgb):
+                pass  # drawn as filled rect — seamless, no gaps
+            elif is_block:
                 painter.setClipRect(x, y, cell_w, self._cell_h)
+                painter.setPen(QColor(*fg_rgb))
+                painter.drawText(x, int(y + self._fm.ascent()), char)
             else:
                 painter.setClipRect(x - 2, y - 2, cell_w + 4, self._cell_h + 4)
-
-            painter.setPen(QColor(*fg_rgb))
-            painter.drawText(x, int(y + self._fm.ascent()), char)
+                painter.setPen(QColor(*fg_rgb))
+                painter.drawText(x, int(y + self._fm.ascent()), char)
 
             if attrs and attrs.strikethrough:
                 mid_y = y + self._cell_h // 2
@@ -292,6 +313,46 @@ class TerminalWidget(QWidget):
             painter.restore()
 
         painter.setFont(self._font)
+
+    @staticmethod
+    def _draw_block_fill(painter: QPainter, char: str, x: int, y: int,
+                          cell_w: int, cell_h: int, fg_rgb: tuple) -> bool:
+        """Draw Unicode block element (U+2580–U+259F) as filled rectangle.
+
+        Returns True if drawn, False to fallback to font rendering.
+        Draws as filled rect to eliminate sub-pixel gaps between adjacent cells.
+        """
+        cp = ord(char)
+        color = QColor(*fg_rgb)
+
+        if cp == 0x2588:                          # █ FULL BLOCK
+            painter.fillRect(x, y, cell_w, cell_h, color)
+        elif cp == 0x2580:                        # ▀ UPPER HALF BLOCK
+            painter.fillRect(x, y, cell_w, cell_h // 2, color)
+        elif cp == 0x2584:                        # ▄ LOWER HALF BLOCK
+            half = cell_h // 2
+            painter.fillRect(x, y + half, cell_w, cell_h - half, color)
+        elif cp == 0x258C:                        # ▌ LEFT HALF BLOCK
+            painter.fillRect(x, y, cell_w // 2, cell_h, color)
+        elif cp == 0x2590:                        # ▐ RIGHT HALF BLOCK
+            half = cell_w // 2
+            painter.fillRect(x + half, y, cell_w - half, cell_h, color)
+        elif 0x2581 <= cp <= 0x2587:              # ▁-▇ Lower 1/8 … 7/8
+            frac = (cp - 0x2580) / 8
+            fill_h = max(1, int(cell_h * frac))
+            painter.fillRect(x, y + cell_h - fill_h, cell_w, fill_h, color)
+        elif 0x2589 <= cp <= 0x258F:              # ▉-▏ Left 7/8 … 1/8
+            frac = (0x2590 - cp) / 8
+            fill_w = max(1, int(cell_w * frac))
+            painter.fillRect(x, y, fill_w, cell_h, color)
+        elif cp == 0x2594:                        # ▔ UPPER 1/8 BLOCK
+            painter.fillRect(x, y, cell_w, max(1, cell_h // 8), color)
+        elif cp == 0x2595:                        # ▕ RIGHT 1/8 BLOCK
+            fill_w = max(1, cell_w // 8)
+            painter.fillRect(x + cell_w - fill_w, y, fill_w, cell_h, color)
+        else:
+            return False  # shade / quadrant — use font
+        return True
 
     @staticmethod
     def _draw_underline(painter: QPainter, x: int, base_y: int,
@@ -361,11 +422,14 @@ class TerminalWidget(QWidget):
 
         x = cx * self._cell_w
         y = cy * self._cell_h
+        preedit_w = len(self._preedit) * self._cell_w
+
+        painter.fillRect(x, y, preedit_w, self._cell_h, self.DEFAULT_BG)
+
         painter.setFont(self._font)
         painter.setPen(self.DEFAULT_FG)
         painter.drawText(x, int(y + self._fm.ascent()), self._preedit)
 
-        preedit_w = len(self._preedit) * self._cell_w
         ul_y = y + self._cell_h - 2
         painter.drawLine(x, int(ul_y), x + preedit_w, int(ul_y))
 
@@ -405,10 +469,11 @@ class TerminalWidget(QWidget):
             r1, c1, r2, c2 = r2, c2, r1, c1
 
         lines = []
+        sb_len = self._term.scrollback_len()
         for r in range(r1, r2 + 1):
             live_row = r - self._scroll_offset
             if live_row < 0:
-                sb_idx = self._scroll_offset - r - 1
+                sb_idx = sb_len - self._scroll_offset + r
                 try:
                     cells = self._term.scrollback_line(sb_idx)
                     text = "".join(c[0] for c in cells)
