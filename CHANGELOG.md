@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3] — 2026-06-04
+
+### Fixed
+- Nerd Font icons rendered as solid silhouettes instead of proper shapes with cutouts. Switched from `QPainter.drawText()` to `QPainterPath.addText()` + `drawPath()` for correct even-odd fill rule preserving glyph counters.
+- Jagged edges after drawPath fix resolved by enabling `QPainter.Antialiasing` on text paths.
+- Font hinting changed from `PreferFullHinting` to `PreferVerticalHinting` to prevent Nerd Font counter shapes from being collapsed by aggressive grid-fitting.
+
+### Changed
+- Added comprehensive terminal test suite (4 scripts from Alacritty + original demo).
+
 ## [0.1.2] — 2026-06-04
 
 ### Fixed
