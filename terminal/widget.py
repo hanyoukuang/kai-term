@@ -711,15 +711,9 @@ class TerminalWidget(QWidget):
                        int(event.position().y() // self._cell_h)))
             self._sel_end = (row, col)
             self.update()
-        elif self._mouse_tracking_active() and event.buttons():
+        if self._mouse_tracking_active() and event.buttons():
             self._send_mouse_event(event, True, motion=True)
-        else:
-            col = int(event.position().x() // self._cell_w)
-            row = int(event.position().y() // self._cell_h)
-            if self._hyperlink_at(col, row):
-                self.setCursor(Qt.PointingHandCursor)
-            else:
-                self.setCursor(Qt.ArrowCursor)
+        elif not self._selecting:
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
