@@ -575,7 +575,7 @@ class TerminalWidget(QWidget):
             # Save press position — only forward to PTY if this turns out
             # to be a click (not a drag that became a selection).
             if self._mouse_tracking_active() and not (event.modifiers() & Qt.ShiftModifier):
-                self._pending_click = (row, col, int(event.modifiers()))
+                self._pending_click = (row, col, event.modifiers().value)
         elif event.button() == Qt.MiddleButton:
             if not self._display_only:
                 text = QApplication.clipboard().text()
@@ -628,11 +628,11 @@ class TerminalWidget(QWidget):
         col = min(col, 222)
         row = min(row, 222)
         code = 0 if pressed else 3
-        if mods & int(Qt.ShiftModifier):
+        if mods & Qt.ShiftModifier.value:
             code += 4
-        if mods & int(Qt.AltModifier | Qt.MetaModifier):
+        if mods & Qt.AltModifier.value or mods & Qt.MetaModifier.value:
             code += 8
-        if mods & int(Qt.ControlModifier):
+        if mods & Qt.ControlModifier.value:
             code += 16
         seq = b"\x1b[M" + bytes([code + 32]) + bytes([col + 32]) + bytes([row + 32])
         self._term.write(seq)
