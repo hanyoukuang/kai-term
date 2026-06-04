@@ -35,7 +35,8 @@ class TerminalWidget(QWidget):
     # Signals — connect to react to terminal events in embedding applications.
     title_changed = Signal(str)    # Shell changed the window title
     process_exited = Signal(int)   # Shell process exited with return code
-    bell_rang = Signal()          # Terminal bell (ASCII BEL, \x07)
+    bell_rang = Signal()             # Terminal bell (ASCII BEL, \x07)
+    selection_copied = Signal(str)   # Selection text copied, host may react
 
     DEFAULT_FG = QColor(192, 192, 192)
     DEFAULT_BG = QColor(0, 0, 0)
@@ -534,6 +535,10 @@ class TerminalWidget(QWidget):
         self._sel_end = None
         self.update()
 
+    def clear_selection(self) -> None:
+        """Clear the selection highlight. Callable by host applications."""
+        self._clear_selection()
+
     # ── Mouse events ─────────────────────────────────────────────────────
 
     def _mouse_tracking_active(self) -> bool:
@@ -621,7 +626,10 @@ class TerminalWidget(QWidget):
             self._selecting = False
             self.setCursor(Qt.ArrowCursor)
             if self._sel_start != self._sel_end:
-                self._copy_selection()
+                text = self._selected_text()
+                if text:
+                    QApplication.clipboard().setText(text)
+                    self.selection_copied.emit(text)
             else:
                 self._clear_selection()
         else:
