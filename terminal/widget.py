@@ -130,6 +130,7 @@ class TerminalWidget(QWidget):
             raise RuntimeError("start_shell() not available in display-only mode")
         self._term.spawn_shell()
         self._shell_started = True
+        self._restart_scheduled = False
         _log.info("PTY session started")
         if sys.platform == "win32":
             self._ensure_start_menu_shortcut()
@@ -187,6 +188,7 @@ class TerminalWidget(QWidget):
             _log.info("PTY write failed — session appears to have exited")
             self._shell_started = False
             self.process_exited.emit(-1)
+            self._schedule_restart()
 
     def _pty_write_str(self, text: str) -> None:
         try:
@@ -195,6 +197,19 @@ class TerminalWidget(QWidget):
             _log.info("PTY write_str failed — session appears to have exited")
             self._shell_started = False
             self.process_exited.emit(-1)
+            self._schedule_restart()
+
+    def _schedule_restart(self) -> None:
+        if not getattr(self, '_restart_scheduled', False):
+            self._restart_scheduled = True
+            QTimer.singleShot(300, self._restart_shell)
+
+    def _restart_shell(self) -> None:
+        self._restart_scheduled = False
+        if self._shell_started:
+            return
+        _log.info("restarting PTY session")
+        self.start_shell()
 
     # ── Polling ──────────────────────────────────────────────────────────
 
@@ -217,6 +232,7 @@ class TerminalWidget(QWidget):
                 _log.info("drain_responses failed — PTY session exited")
                 self._shell_started = False
                 self.process_exited.emit(-1)
+                self._schedule_restart()
         except Exception:
             pass
 
