@@ -413,7 +413,7 @@ class TerminalWidget(QWidget):
             x = col * self._cell_w
             is_wide = attrs and attrs.wide_char
             cell_w = self._cell_w * 2 if is_wide else self._cell_w
-            is_space = not char or char == " "
+            is_space = not char or char.isspace() or char == "\x00"
 
             is_reverse = attrs and attrs.reverse
             if is_reverse:
