@@ -8,7 +8,11 @@ from PySide6.QtGui import (
     QInputMethodEvent, QPainterPath,
 )
 import sys
+import logging
+
 from .input_handler import InputHandler
+
+_log = logging.getLogger(__name__)
 
 
 _FONT_CANDIDATES = (
@@ -126,6 +130,7 @@ class TerminalWidget(QWidget):
             raise RuntimeError("start_shell() not available in display-only mode")
         self._term.spawn_shell()
         self._shell_started = True
+        _log.info("PTY session started")
         if sys.platform == "win32":
             self._ensure_start_menu_shortcut()
 
@@ -179,6 +184,7 @@ class TerminalWidget(QWidget):
         try:
             self._term.write(data)
         except RuntimeError:
+            _log.info("PTY write failed — session appears to have exited")
             self._shell_started = False
             self.process_exited.emit(-1)
 
@@ -186,6 +192,7 @@ class TerminalWidget(QWidget):
         try:
             self._term.write_str(text)
         except RuntimeError:
+            _log.info("PTY write_str failed — session appears to have exited")
             self._shell_started = False
             self.process_exited.emit(-1)
 
@@ -207,6 +214,7 @@ class TerminalWidget(QWidget):
             self._term.drain_responses()
         except RuntimeError:
             if self._shell_started:
+                _log.info("drain_responses failed — PTY session exited")
                 self._shell_started = False
                 self.process_exited.emit(-1)
         except Exception:
@@ -1031,7 +1039,7 @@ class TerminalWidget(QWidget):
             try:
                 self._term.resize(self._cols, self._rows)
             except RuntimeError:
-                pass
+                _log.warning("PTY resize failed in resizeEvent (cols=%s rows=%s)", self._cols, self._rows)
             self._mouse_term.resize(self._cols, self._rows)
 
         self.update()
@@ -1065,5 +1073,7 @@ class TerminalWidget(QWidget):
         try:
             self._term.resize(self._cols, self._rows)
         except RuntimeError:
-            pass
+            _log.warning("PTY resize failed in _change_font_size (cols=%s rows=%s)", self._cols, self._rows)
+        self._mouse_term.resize(self._cols, self._rows)
+
         self.update()

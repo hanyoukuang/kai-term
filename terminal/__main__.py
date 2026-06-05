@@ -8,6 +8,7 @@ Usage:
 
 import sys
 import argparse
+import logging
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
@@ -33,6 +34,12 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("pyqterminal")
     app.setApplicationDisplayName("pyqterminal")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
     if sys.platform == "win32":
         import ctypes
