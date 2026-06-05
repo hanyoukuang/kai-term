@@ -73,6 +73,7 @@ class TerminalWidget(QWidget):
         self._blink_visible = True
         self._generation = 0
         self._display_only = display_only
+        self._active_bg = None
         self._prev_title = ""
         self._prev_clipboard = ""
         self._prev_cwd = ""
@@ -345,6 +346,37 @@ class TerminalWidget(QWidget):
                 'selected': selected, 'attrs': attrs,
                 'is_space': is_space, 'hyperlink': hyperlink,
             })
+
+        last_bg = None
+        for d in cell_data:
+            if d['bg_rgb'] != (0, 0, 0):
+                last_bg = d['bg_rgb']
+                break
+
+        if last_bg is None and self._active_bg is not None:
+            last_bg = self._active_bg
+        elif last_bg is None and buffer_row >= 0:
+            for next_row in range(buffer_row + 1, min(buffer_row + 8, self._rows)):
+                try:
+                    for _, _, bg, _ in self._term.get_line_cells(next_row):
+                        if bg != (0, 0, 0):
+                            last_bg = bg
+                            break
+                except Exception:
+                    continue
+                if last_bg is not None:
+                    break
+
+        for d in cell_data:
+            if d['bg_rgb'] != (0, 0, 0):
+                last_bg = d['bg_rgb']
+            elif last_bg is not None and d['is_space']:
+                d['bg_rgb'] = last_bg
+            if not d['is_space']:
+                last_bg = d['bg_rgb']
+
+        if last_bg is not None and last_bg != (0, 0, 0):
+            self._active_bg = last_bg
 
         for d in cell_data:
             if d['selected']:
