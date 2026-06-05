@@ -441,10 +441,16 @@ class TerminalWidget(QWidget):
             })
 
         last_bg = None
-        for d in cell_data:
+        mid = len(cell_data) // 3
+        for d in cell_data[mid:]:
             if d['bg_rgb'] != (0, 0, 0):
                 last_bg = d['bg_rgb']
                 break
+        if last_bg is None:
+            for d in cell_data:
+                if d['bg_rgb'] != (0, 0, 0):
+                    last_bg = d['bg_rgb']
+                    break
 
         if last_bg is None and self._active_bg is not None:
             last_bg = self._active_bg
