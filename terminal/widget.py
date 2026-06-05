@@ -229,6 +229,23 @@ class TerminalWidget(QWidget):
                     ["osascript", "-e",
                      f'display notification "{message}" with title "{title or "Terminal"}"'],
                     capture_output=True, timeout=3)
+            elif sys.platform == "win32":
+                safe_title = (title or "Terminal").replace("'", "''")
+                safe_msg = message.replace("'", "''")
+                ps = (
+                    "[Windows.UI.Notifications.ToastNotificationManager,"
+                    "Windows.UI.Notifications,ContentType=WindowsRuntime];"
+                    "$tpl=[Windows.UI.Notifications.ToastNotificationManager]"
+                    "::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+                    f"$tpl.GetElementsByTagName('text').Item(0).AppendChild($tpl.CreateTextNode('{safe_title}'));"
+                    f"$tpl.GetElementsByTagName('text').Item(1).AppendChild($tpl.CreateTextNode('{safe_msg}'));"
+                    "$n=[Windows.UI.Notifications.ToastNotification]::new($tpl);"
+                    "[Windows.UI.Notifications.ToastNotificationManager]"
+                    "::CreateToastNotifier('pyqterminal').Show($n)"
+                )
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps],
+                    capture_output=True, timeout=5)
             elif sys.platform == "linux":
                 subprocess.run(
                     ["notify-send", title or "Terminal", message],
