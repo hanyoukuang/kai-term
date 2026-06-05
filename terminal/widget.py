@@ -124,16 +124,6 @@ class TerminalWidget(QWidget):
         if self._display_only:
             raise RuntimeError("start_shell() not available in display-only mode")
         self._term.spawn_shell()
-        QTimer.singleShot(400, self._ensure_grid_reflow)
-        QTimer.singleShot(1000, self._ensure_grid_reflow)
-
-    def _ensure_grid_reflow(self) -> None:
-        self._term.resize(self._cols, self._rows + 1)
-        self._term.resize(self._cols, self._rows)
-        self._mouse_term.resize(self._cols, self._rows)
-        if not self._display_only:
-            self._generation = self._term.update_generation()
-        self.repaint()
 
     def feed(self, data: str) -> None:
         """Feed text/escape sequences for display (display-only mode).
@@ -355,6 +345,15 @@ class TerminalWidget(QWidget):
                 'selected': selected, 'attrs': attrs,
                 'is_space': is_space, 'hyperlink': hyperlink,
             })
+
+        last_bg = None
+        for d in cell_data:
+            if d['bg_rgb'] != (0, 0, 0):
+                last_bg = d['bg_rgb']
+            elif last_bg is not None and d['is_space']:
+                d['bg_rgb'] = last_bg
+            if not d['is_space']:
+                last_bg = d['bg_rgb']
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, False)
