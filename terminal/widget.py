@@ -471,16 +471,13 @@ class TerminalWidget(QWidget):
         if last_bg is not None and last_bg != (0, 0, 0):
             self._active_bg = last_bg
 
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, False)
-        painter.setPen(Qt.NoPen)
         for d in cell_data:
             if d['selected']:
-                painter.setBrush(self.SELECTION_BG)
+                painter.fillRect(d['x'], y, d['cell_w'], self._cell_h,
+                                 self.SELECTION_BG)
             else:
-                painter.setBrush(QColor(*d['bg_rgb']))
-            painter.drawRect(d['x'], y, d['cell_w'], self._cell_h)
-        painter.restore()
+                painter.fillRect(d['x'], y, d['cell_w'], self._cell_h,
+                                 QColor(*d['bg_rgb']))
 
         for d in cell_data:
             attrs = d['attrs']
