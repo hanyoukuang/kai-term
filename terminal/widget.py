@@ -78,6 +78,7 @@ class TerminalWidget(QWidget):
         self._generation = 0
         self._display_only = display_only
         self._shell_started = False
+        self._active_bg = None
         self._prev_title = ""
         self._prev_clipboard = ""
         self._prev_cwd = ""
@@ -128,9 +129,16 @@ class TerminalWidget(QWidget):
         """Start interactive shell (PtyTerminal mode only)."""
         if self._display_only:
             raise RuntimeError("start_shell() not available in display-only mode")
-        self._term.spawn_shell()
+        try:
+            self._term.spawn_shell()
+        except RuntimeError:
+            _log.warning("spawn_shell failed — PTY may be dead, creating fresh terminal")
+            self._term = PtyTerminal(self._cols, self._rows, scrollback=10000)
+            self._term.set_accept_osc7(True)
+            self._term.spawn_shell()
         self._shell_started = True
         self._restart_scheduled = False
+        self._active_bg = None
         _log.info("PTY session started")
         if sys.platform == "win32":
             self._ensure_start_menu_shortcut()
@@ -438,6 +446,9 @@ class TerminalWidget(QWidget):
                 last_bg = d['bg_rgb']
                 break
 
+        if last_bg is None and self._active_bg is not None:
+            last_bg = self._active_bg
+
         for d in cell_data:
             if d['bg_rgb'] != (0, 0, 0):
                 last_bg = d['bg_rgb']
@@ -445,6 +456,9 @@ class TerminalWidget(QWidget):
                 d['bg_rgb'] = last_bg
             if not d['is_space']:
                 last_bg = d['bg_rgb']
+
+        if last_bg is not None:
+            self._active_bg = last_bg
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, False)
