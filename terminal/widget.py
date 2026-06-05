@@ -350,7 +350,7 @@ class TerminalWidget(QWidget):
             if d['selected']:
                 painter.fillRect(d['x'], y, d['cell_w'], self._cell_h,
                                  self.SELECTION_BG)
-            elif d['bg_rgb'] != (0, 0, 0):
+            else:
                 painter.fillRect(d['x'], y, d['cell_w'], self._cell_h,
                                  QColor(*d['bg_rgb']))
 
