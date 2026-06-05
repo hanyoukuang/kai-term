@@ -16,7 +16,7 @@
 | 6 | 06-03 | Phase 5 | 彩色背景的"空格"单元格不显示背景色 | `_draw_row` 中背景填充在空格跳过逻辑之后 | 将 bg fillRect 移到空格判断之前 |
 | 7 | 06-03 | Phase 5 | nano 上方标题栏/下方提示栏纯白色背景不显示 | `attrs.reverse` (SGR 7) 未被渲染层处理。Rust 引擎不预交换 fg/bg，需要渲染层自己交换 | 在 `_render_cells` 中添加 `attrs.reverse` 检测，为 True 时交换 fg/bg（含默认值处理） |
 | 8 | 06-04 | Phase 6 | ~~高亮不消失~~（非 Bug，见下方） + 无复制通知 + SGR 鼠标编码 Bug | `_send_mouse_event` 中 `mouse_encoding().name` 永远失败，SGR 编码从未启用 | 修复 SGR 编码检测 + 记录高亮行为规范 |
-| 9 | 06-05 | Phase 6 | Windows 上灰色背景渲染为黑色 | (1) Python `(0,0,0)` 为 falsy，`if bg else` 与 `None` 混淆；(2) `bg_rgb != (0,0,0)` 跳过优化，但 Rust 未写入单元格返回 `bg=(0,0,0)`；(3) 同尺寸 `resize()` 是 no-op | (1) `is not None` 检测；(2) 移除跳过优化 + 显式 pen/brush/drawRect；(3) `start_shell()` 后延迟切换尺寸触发重排 |
+| 9 | 06-05 | Phase 6 | Windows 上 openCode 等 TUI 背景渲染异常 | Rust vte 后端对未写入单元格返回 `bg=(0,0,0)`，不会自动扩展当前 SGR 背景色 | 渲染层添加行级背景填充（`last_bg` 机制）：行首扫描有效背景色 → 整行铺设 → 单格差异覆盖 + `_active_bg` 跨行缓存。不改动 `cell_data`，兼容 nano/macOS |
 
 ---
 
@@ -48,8 +48,8 @@
 - [ ] `attrs.dim` (SGR 2 暗淡) — 前景色 RGB 减半
 - [ ] `attrs.strikethrough` (SGR 9 删除线) — 在单元格中线画横线
 - [ ] `attrs.underline_style` (UnderlineStyle 枚举) — Straight/Double/Curly/Dotted/Dashed 五种下划线样式
-- [ ] `get_line_cells()` 返回 `list[(char, fg, bg, attrs)]` — attrs 包含 `reverse/bold/italic/underline/blink/dim/hidden/strikethrough` 等 12 个字段
-- [ ] `get_line_cells()` 始终返回 RGB 元组（从不返回 None）— 默认背景 `(0,0,0)`、默认前景 `(192,192,192)`。**颜色判断必须用 `is not None`，不能用 truthiness**（`(0,0,0)` 是 falsy！）
+- [ ] `get_line_cells()` 始终返回 RGB 元组（从不返回 None）— 默认背景 `(0,0,0)`、默认前景 `(192,192,192)`。未写入单元格 bg 为 `(0,0,0)`，不会自动继承当前 SGR 背景色
+- [ ] Windows conpty PTY 对某些 TUI 应用（如 openCode）支持有限，并非 pyqterminal 渲染问题
 - [ ] Python 3.12+ 必填 — 使用 `uv python install 3.12.13` 或 `.python-version`
 
 ### PySide6 / Qt
@@ -59,8 +59,7 @@
 - [ ] `event.key()` vs `event.text()` — 前者是键码，后者是文本
 - [ ] `QFontMetrics.height()` 包含行间距，`lineSpacing()` 可能更合适
 - [ ] QPixmap 需要满足大小 `(cols * cell_w, rows * cell_h)`，resize 时重建
-- [ ] Windows Direct2D：`fillRect(QColor)` 重载可靠性低于 `setPen(NoPen)+setBrush(QColor)+drawRect()` → 背景填充用显式 pen/brush
-- [ ] `_term.resize(cols, rows)` 同尺寸是 no-op；触发真实重排需要尺寸变化（如 `rows+1` 再 `rows`）
+- [ ] `_term.resize(cols, rows)` 同尺寸是 no-op；触发真实重排需要尺寸变化
 
 ---
 
@@ -96,31 +95,27 @@ is_sgr = self._term.mouse_encoding() == MouseEncoding.Sgr
 
 ---
 
-## 错误 #9：Windows 灰色背景渲染为黑色 + 假值元组 bug
+## 错误 #9：openCode 等 TUI 背景渲染异常
 
-### 假值元组 bug（第 325-332, 370 行）
+### 症状
 
-```python
-# BUG: Python (0,0,0) 是 falsy！if bg → False → 回退到默认值
-eff_fg = bg if bg else (0, 0, 0)
-fg_rgb = d['eff_fg'] if d['eff_fg'] else (192, 192, 192)
-bg_rgb = eff_bg if eff_bg else (0, 0, 0)
-```
+macOS 正常，Windows 上 openCode 等 TUI 应用的无文字区域背景显示为黑色。手动缩放终端可修复。
 
-Rust 后端 `get_line_cells()` **始终返回 RGB 元组，从不返回 None**。默认前景 = `(192,192,192)`，默认背景 = `(0,0,0)`。SGR 30 设置的黑色文字 `fg=(0,0,0)` 因真假检查被替换为默认浅灰色 `(192,192,192)`。
+### 根因
 
-**修复**：`is not None` 替代真假检查。
+Rust vte 后端对从未被显式写入字符的单元格返回 `bg=(0,0,0)`，不会自动扩展当前 SGR 背景色。Konsole 等成熟终端在 Screen 层做 `clearImage` 时用当前 SGR 颜色填充所有单元格，但 pyqterminal 的 Rust 后端没有这个机制。
 
-### Windows 灰色背景渲染为黑色
+### 修复（渲染层行级填充，不改动 cell_data）
 
-症状：macOS 正常，Windows 上文字区域正常但无文字区域黑色色块。手动缩放终端可修复。
+渲染前计算每行的有效背景色（`last_bg`）：
 
-根因（三层）：
-1. Rust 后端对未写入字符的单元格返回 `bg=(0,0,0)`（即使 SGR 已设置背景色）
-2. `bg_rgb != (0,0,0)` 优化跳过黑色背景填充 → widget 默认黑色透出
-3. 同尺寸 `resize()` 是 no-op；不同尺寸 resize 触发 vte 网格重排 + SIGWINCH → app 重绘 → 修复
+1. **行首扫描**：找到该行第一个非 `(0,0,0)` 背景色的格子
+2. **跨行缓存**：上一非空行的有效背景色通过 `_active_bg` 缓存，空行继承
+3. **前向扫描**：行首空行且 `_active_bg` 为空时，向后扫描最多 8 行
+4. **逐格填充**：每个格子用自己的 `bg_rgb`（非默认时）或用 `last_bg` 兜底
 
-修复（三层对应）：
-1. 移除 `bg_rgb != (0,0,0)` 优化 → 始终填充所有单元格背景
-2. 背景填充用显式 `setPen(NoPen)+setBrush(QColor)+drawRect()`（比 `fillRect(QColor)` 在 D2D 下更可靠）
-3. `start_shell()` 后两个错开定时器触发 `_ensure_grid_reflow()`（`resize(rows+1)` 再 `resize(rows)` 恢复）
+**关键设计**：不修改 `cell_data`，不影响 nano 等正常终端应用的渲染。
+
+### 已知限制
+
+Windows conpty PTY 对 openCode 等部分 TUI 应用支持有限，表现为某些深色背景渲染异常。这不是 pyqterminal 代码问题，是底层 PTY 实现的差异。macOS/Linux 无此限制。
