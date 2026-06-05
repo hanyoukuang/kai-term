@@ -124,6 +124,16 @@ class TerminalWidget(QWidget):
         if self._display_only:
             raise RuntimeError("start_shell() not available in display-only mode")
         self._term.spawn_shell()
+        QTimer.singleShot(400, self._ensure_grid_reflow)
+        QTimer.singleShot(1000, self._ensure_grid_reflow)
+
+    def _ensure_grid_reflow(self) -> None:
+        self._term.resize(self._cols, self._rows + 1)
+        self._term.resize(self._cols, self._rows)
+        self._mouse_term.resize(self._cols, self._rows)
+        if not self._display_only:
+            self._generation = self._term.update_generation()
+        self.repaint()
 
     def feed(self, data: str) -> None:
         """Feed text/escape sequences for display (display-only mode).
@@ -323,13 +333,13 @@ class TerminalWidget(QWidget):
 
             is_reverse = attrs and attrs.reverse
             if is_reverse:
-                eff_fg = bg if bg else (0, 0, 0)
-                eff_bg = fg if fg else (192, 192, 192)
+                eff_fg = bg if bg is not None else (0, 0, 0)
+                eff_bg = fg if fg is not None else (192, 192, 192)
             else:
                 eff_fg = fg
                 eff_bg = bg
 
-            bg_rgb = eff_bg if eff_bg else (0, 0, 0)
+            bg_rgb = eff_bg if eff_bg is not None else (0, 0, 0)
             selected = self._cell_in_selection(display_row, col)
 
             hyperlink = ""
@@ -346,13 +356,16 @@ class TerminalWidget(QWidget):
                 'is_space': is_space, 'hyperlink': hyperlink,
             })
 
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setPen(Qt.NoPen)
         for d in cell_data:
             if d['selected']:
-                painter.fillRect(d['x'], y, d['cell_w'], self._cell_h,
-                                 self.SELECTION_BG)
-            elif d['bg_rgb'] != (0, 0, 0):
-                painter.fillRect(d['x'], y, d['cell_w'], self._cell_h,
-                                 QColor(*d['bg_rgb']))
+                painter.setBrush(self.SELECTION_BG)
+            else:
+                painter.setBrush(QColor(*d['bg_rgb']))
+            painter.drawRect(d['x'], y, d['cell_w'], self._cell_h)
+        painter.restore()
 
         for d in cell_data:
             attrs = d['attrs']
@@ -367,7 +380,7 @@ class TerminalWidget(QWidget):
             if attrs and attrs.blink and not self._blink_visible:
                 continue
 
-            fg_rgb = d['eff_fg'] if d['eff_fg'] else (192, 192, 192)
+            fg_rgb = d['eff_fg'] if d['eff_fg'] is not None else (192, 192, 192)
             if attrs and attrs.dim:
                 fg_rgb = tuple(c // 2 for c in fg_rgb)
 
