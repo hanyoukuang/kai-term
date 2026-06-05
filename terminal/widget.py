@@ -441,24 +441,33 @@ class TerminalWidget(QWidget):
             })
 
         last_bg = None
-        for d in cell_data:
+        for i, d in enumerate(cell_data):
             if d['bg_rgb'] != (0, 0, 0):
                 last_bg = d['bg_rgb']
+                _log.debug("row %d col %d: first-pass found bg=%s", buffer_row, i, last_bg)
                 break
 
         if last_bg is None and self._active_bg is not None:
+            _log.debug("row %d: using cached _active_bg=%s", buffer_row, self._active_bg)
             last_bg = self._active_bg
         elif last_bg is None and buffer_row >= 0:
+            _log.debug("row %d: forward-scanning rows %d..%d",
+                       buffer_row, buffer_row + 1, min(buffer_row + 8, self._rows) - 1)
             for next_row in range(buffer_row + 1, min(buffer_row + 8, self._rows)):
                 try:
                     for _, _, bg, _ in self._term.get_line_cells(next_row):
                         if bg != (0, 0, 0):
                             last_bg = bg
+                            _log.debug("row %d: forward-scan found bg=%s at row %d",
+                                       buffer_row, bg, next_row)
                             break
                 except Exception:
                     continue
                 if last_bg is not None:
                     break
+
+        if last_bg is None:
+            _log.debug("row %d: no effective bg found (all cells have bg=(0,0,0))", buffer_row)
 
         for d in cell_data:
             if d['bg_rgb'] != (0, 0, 0):
