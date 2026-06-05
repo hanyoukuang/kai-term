@@ -787,8 +787,8 @@ class TerminalWidget(QWidget):
                             motion: bool = False) -> None:
         if self._display_only or not self._shell_started:
             return
-        col = int(event.position().x() // self._cell_w)
-        row = int(event.position().y() // self._cell_h)
+        col = max(0, min(self._cols - 1, int(event.position().x() // self._cell_w)))
+        row = max(0, min(self._rows - 1, int(event.position().y() // self._cell_h)))
         btn = event.button()
         if btn == Qt.LeftButton:
             code = 0
