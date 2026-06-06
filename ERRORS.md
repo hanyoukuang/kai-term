@@ -17,6 +17,7 @@
 | 7 | 06-03 | Phase 5 | nano 上方标题栏/下方提示栏纯白色背景不显示 | `attrs.reverse` (SGR 7) 未被渲染层处理。Rust 引擎不预交换 fg/bg，需要渲染层自己交换 | 在 `_render_cells` 中添加 `attrs.reverse` 检测，为 True 时交换 fg/bg（含默认值处理） |
 | 8 | 06-04 | Phase 6 | ~~高亮不消失~~（非 Bug，见下方） + 无复制通知 + SGR 鼠标编码 Bug | `_send_mouse_event` 中 `mouse_encoding().name` 永远失败，SGR 编码从未启用 | 修复 SGR 编码检测 + 记录高亮行为规范 |
 | 9 | 06-05 | Phase 6 | Windows 上 openCode 等 TUI 背景渲染异常 | Rust vte 后端对未写入单元格返回 `bg=(0,0,0)`，不会自动扩展当前 SGR 背景色 | 渲染层添加行级背景填充（`last_bg` 机制）：行首扫描有效背景色 → 整行铺设 → 单格差异覆盖 + `_active_bg` 跨行缓存。不改动 `cell_data`，兼容 nano/macOS |
+| 10 | 06-06 | Wave 1 | openCode等TUI应用在Windows上背景显示为黑色（macOS正常） | Rust vte后端仅记录被显式写入单元格的bg，未写入单元格返回bg=(0,0,0)。Windows conpty可能不传递某些擦除序列。 | 添加_BackgroundPropagator预处理层：行级缓存+向上继承。交互模式和显示模式均支持。live模式使用跨行缓存，scrollback模式仅行内扫描。resize和Alt Screen切换时reset()清除缓存。已知限制：无法区分"有意黑色"与"未写入"——采用启发式（有文本内容的单元格视为有意设置） |
 
 ---
 
@@ -51,6 +52,7 @@
 - [ ] `get_line_cells()` 始终返回 RGB 元组（从不返回 None）— 默认背景 `(0,0,0)`、默认前景 `(192,192,192)`。未写入单元格 bg 为 `(0,0,0)`，不会自动继承当前 SGR 背景色
 - [ ] Windows conpty PTY 对某些 TUI 应用（如 openCode）支持有限，并非 pyqterminal 渲染问题
 - [ ] Python 3.12+ 必填 — 使用 `uv python install 3.12.13` 或 `.python-version`
+- [ ] `_BackgroundPropagator` — 预处理类，在渲染前填充未写入单元格的背景色。需在resize和Alt Screen切换时调用reset()
 
 ### PySide6 / Qt
 

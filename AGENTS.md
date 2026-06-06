@@ -59,6 +59,7 @@ The core rendering logic lives in `_render_cells(painter, cells, y, display_row)
 9. **Bold & Italic.** Pre-built QFont variants (`_font_bold`, `_font_italic`, `_font_bold_italic`) are selected based on `attrs.bold` / `attrs.italic`. Font is reset to `self._font` at the end of `_render_cells`.
 10. **Strikethrough (SGR 9).** `attrs.strikethrough` — horizontal line at cell midpoint (`cell_h // 2`).
 11. **Underline styles (SGR 4:N).** `attrs.underline_style` (UnderlineStyle enum): Straight, Double (two lines), Curly (dashed approx), Dotted (Qt.DotLine), Dashed (Qt.DashLine).
+12. **BackgroundPropagator** (SGR background propagation). `_BackgroundPropagator` pre-processes cell data from `get_line_cells()` / `scrollback_line()` before it enters `_render_cells()`. It fills in background colors for unwritten cells (bg=(0,0,0) + empty char) by scanning rows for a non-default background and inheriting across rows via a row-level cache. Called in `_draw_live_row()` with `buffer_type="live"` (cross-row cache) and `_draw_scrollback_row()` with `buffer_type="scrollback"` (intra-row only). Must call `reset()` on resize and Alt Screen transitions (`is_alt_screen_active()`). Known limitation: cannot distinguish between intentionally black backgrounds (SGR 40) and unwritten cells — uses heuristic based on character presence.
 
 ## Display-Only Mode
 
