@@ -216,26 +216,35 @@ class TestBackgroundPropagator:
         )
 
     # ---- 7 ----------------------------------------------------------------
-    def test_deep_propagation_no_limit(self):
-        """深层传播无行数限制。
+    def test_propagation_stops_after_one_hop(self):
+        """传播仅限 1 跳：只有紧邻拥有自身背景的行才能继承，继承来的背景不继续传播。
 
-        第 0 行: 蓝色背景
-        第 1-15 行: 全空
-        期望: 所有空行 bg 均为 (0,0,255)
+        设计意图：Shell 提示符可能有局部背景高亮（如白色），不应无限传播到所有空行。
+        TUI 应用的背景通常每行都有自身背景，依赖行内 _compute_row_bg 而非缓存继承。
+
+        第 0 行: 自身蓝色背景
+        第 1 行: 全空 → 继承蓝色（1 跳）
+        第 2-5 行: 全空 → 不继承（上一行背景是继承来的，非自身）
         """
         prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
         blue = (0, 0, 255)
 
-        # 第 0 行：设置缓存
+        # 第 0 行：设置缓存（自身背景）
         prop.process_cells(0, make_row([blue] * 3), "live")
 
-        # 连续处理 15 行空行
-        for row_idx in range(1, 16):
-            empty_row = make_row([DEFAULT_BG] * 3)
-            result = prop.process_cells(row_idx, empty_row, "live")
+        # 第 1 行：应继承（1 跳）
+        result1 = prop.process_cells(1, make_row([DEFAULT_BG] * 3), "live")
+        for i, cell in enumerate(result1):
+            assert cell[2] == blue, (
+                f"第 1 行 col{i} 应继承蓝色（1跳），实际: {cell[2]}"
+            )
+
+        # 第 2+ 行：不应继承
+        for row_idx in range(2, 6):
+            result = prop.process_cells(row_idx, make_row([DEFAULT_BG] * 3), "live")
             for i, cell in enumerate(result):
-                assert cell[2] == blue, (
-                    f"第 {row_idx} 行 col{i} 应继承蓝色，实际: {cell[2]}"
+                assert cell[2] == DEFAULT_BG, (
+                    f"第 {row_idx} 行 col{i} 不应继承，实际: {cell[2]}"
                 )
 
     # ---- 8 ----------------------------------------------------------------

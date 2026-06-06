@@ -92,20 +92,19 @@ class _BackgroundPropagator:
         return None
 
     def _inherit_from_cache(self, row_idx: int) -> tuple[int, int, int] | None:
-        """从行级缓存向后回溯，查找可继承的背景色。
+        """从上一行的缓存中继承背景色（仅 1 跳）。
 
-        从 row_idx-1 开始向前扫描，返回最近的非空缓存项。
+        仅当紧邻的上一行通过 _compute_row_bg 计算出了自身的有效背景色时，
+        才允许继承。继承来的背景不缓存（防止无限传播）。
 
         Args:
             row_idx: 当前行索引。
 
         Returns:
-            继承到的背景色，若无缓存项则返回 None。
+            继承到的背景色，若无则返回 None。
         """
-        for i in range(row_idx - 1, -1, -1):
-            cached = self._row_bg_cache[i]
-            if cached is not None:
-                return cached
+        if row_idx > 0 and self._row_bg_cache[row_idx - 1] is not None:
+            return self._row_bg_cache[row_idx - 1]
         return None
 
     def process_cells(
@@ -140,22 +139,26 @@ class _BackgroundPropagator:
                 f"buffer_type must be 'live' or 'scrollback', got {buffer_type!r}"
             )
 
-        # 步骤 1：从当前行推断有效背景色
-        eff_bg = self._compute_row_bg(cells)
+        # 步骤 1：从当前行推断有效背景色（行内自身背景）
+        own_bg = self._compute_row_bg(cells)
 
-        # 步骤 2：live 模式下尝试跨行继承
-        if eff_bg is None and buffer_type == "live":
+        if own_bg is not None:
+            # 本行有自己的有效背景 → 使用它并缓存，供下一行继承
+            eff_bg = own_bg
+            if buffer_type == "live" and 0 <= row_idx < self._rows:
+                self._row_bg_cache[row_idx] = eff_bg
+        elif buffer_type == "live":
+            # 本行无自身背景 → 尝试从上一行继承（仅 1 跳）
             eff_bg = self._inherit_from_cache(row_idx)
+            # 继承来的背景不缓存，防止无限向下传播
+        else:
+            eff_bg = None
 
-        # 步骤 3：没有背景可传播，原样返回
+        # 没有背景可传播 → 原样返回
         if eff_bg is None:
             return cells
 
-        # 步骤 4：更新缓存（仅 live 模式）
-        if buffer_type == "live" and 0 <= row_idx < self._rows:
-            self._row_bg_cache[row_idx] = eff_bg
-
-        # 步骤 5：遍历 cells，替换未写入单元格的背景色
+        # 遍历 cells，替换未写入单元格的背景色
         result: list = []
         for cell in cells:
             if self._is_unwritten(cell):
