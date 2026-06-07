@@ -195,7 +195,7 @@ class TerminalWidget(QWidget):
         try:
             if self._display_only:
                 return
-            if not self._session_ended and hasattr(self._term, 'is_alt_screen_active'):
+            if hasattr(self._term, 'is_alt_screen_active'):
                 try:
                     is_alt = self._term.is_alt_screen_active()
                     prev = getattr(self, '_prev_alt_screen', False)
@@ -204,17 +204,8 @@ class TerminalWidget(QWidget):
                         self._prev_alt_screen = is_alt
                 except Exception:
                     pass
-            try:
-                has_updates = self._term.has_updates_since(self._generation)
-            except RuntimeError:
-                self._on_session_ended()
-                return
-            if has_updates:
-                try:
-                    self._generation = self._term.update_generation()
-                except RuntimeError:
-                    self._on_session_ended()
-                    return
+            if self._term.has_updates_since(self._generation):
+                self._generation = self._term.update_generation()
                 self._idle_polls = 0
                 if self._scroll_offset == 0:
                     self._unseen_output = False
@@ -229,9 +220,6 @@ class TerminalWidget(QWidget):
 
             try:
                 self._term.drain_responses()
-            except RuntimeError:
-                self._on_session_ended()
-                return
             except Exception:
                 pass
 
