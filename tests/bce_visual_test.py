@@ -53,7 +53,7 @@ def run_bce_test() -> int:
     from terminal.background_propagator import _BackgroundPropagator
 
     term = Terminal(40, 12)
-    propagator = _BackgroundPropagator(rows=12, cols=40)
+    propagator = _BackgroundPropagator(rows=12)
 
     # ── Test data: each row is (description, escape_sequence, row_label) ──
     # Sequences include \r\n to advance to next line after writing.
@@ -96,7 +96,7 @@ def run_bce_test() -> int:
         raw_cells = term.get_line_cells(row_idx)
 
         # Apply background propagation (our fix)
-        cells = propagator.process_cells(row_idx, raw_cells, "live")
+        cells = propagator.process_cells(row_idx, raw_cells)
 
         # ── Verify: for "with EL" rows, trailing cells should have SGR bg ──
         expected_bg = expected_bgs[row_idx]

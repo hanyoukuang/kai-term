@@ -75,15 +75,15 @@ class TestBackgroundPropagator:
         第 1 行: 全空 (DEFAULT_BG)
         期望: 第 1 行所有单元格 bg 变为 (0,0,255)
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
         blue = (0, 0, 255)
 
         # 第 0 行：蓝色背景（作为"上一行"产生缓存）
-        prop.process_cells(0, make_row([blue] * 5), "live")
+        prop.process_cells(0, make_row([blue] * 5))
 
         # 第 1 行：全空行（所有 bg 为 DEFAULT_BG）
         empty_row = make_row([DEFAULT_BG] * 5)
-        result = prop.process_cells(1, empty_row, "live")
+        result = prop.process_cells(1, empty_row)
 
         # 断言：每列的 bg 均为蓝色
         for i, cell in enumerate(result):
@@ -99,11 +99,11 @@ class TestBackgroundPropagator:
         第 1 行: 有字符 'X' + bg=(0,0,0) (黑色字符)
         期望: 该单元格 bg 保持 (0,0,0)，不被蓝色覆盖
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
         blue = (0, 0, 255)
 
         # 设置缓存的活跃背景为蓝色
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # 第 1 行：有一个显式黑色单元格 + 周围空单元格
         row = [
@@ -111,7 +111,7 @@ class TestBackgroundPropagator:
             (' ', DEFAULT_FG, DEFAULT_BG, MockAttrs()),   # 空单元格
             (' ', DEFAULT_FG, DEFAULT_BG, MockAttrs()),   # 空单元格
         ]
-        result = prop.process_cells(1, row, "live")
+        result = prop.process_cells(1, row)
 
         # 有字符 'X' 且 bg=DEFAULT_BG → 认为是有意黑色，不覆盖
         assert result[0][2] == DEFAULT_BG, (
@@ -129,19 +129,19 @@ class TestBackgroundPropagator:
         第 1 行: col0=红色 (255,0,0) 自身背景，col1=空 (DEFAULT_BG)
         期望: col0 保持红色，col1 继承行内有效背景（红色），而非缓存（蓝色）
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
         blue = (0, 0, 255)
         red = (255, 0, 0)
 
         # 第 0 行
-        prop.process_cells(0, make_row([blue] * 2), "live")
+        prop.process_cells(0, make_row([blue] * 2))
 
         # 第 1 行：混合
         row = [
             ('X', DEFAULT_FG, red, MockAttrs()),         # 自身红色背景
             (' ', DEFAULT_FG, DEFAULT_BG, MockAttrs()),   # 空，应继承
         ]
-        result = prop.process_cells(1, row, "live")
+        result = prop.process_cells(1, row)
 
         assert result[0][2] == red, f"自身红色背景应保持，实际: {result[0][2]}"
         assert result[1][2] == red, f"空列应继承行内有效背景（红色），实际: {result[1][2]}"
@@ -153,10 +153,10 @@ class TestBackgroundPropagator:
         第 0 行全 DEFAULT_BG，无上一行可继承
         期望: 所有 bg 保持 DEFAULT_BG
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
 
         row0 = make_row([DEFAULT_BG] * 5)
-        result = prop.process_cells(0, row0, "live")
+        result = prop.process_cells(0, row0)
 
         for i, cell in enumerate(result):
             assert cell[2] == DEFAULT_BG, (
@@ -171,15 +171,15 @@ class TestBackgroundPropagator:
         第 1 行: 空行
         期望: 第 1 行不继承该反向视频单元格的背景色（cells 保持不变）
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
 
         # 反向视频单元格：存储 bg=(255,255,255)，但视觉 bg=fut（由渲染器 swap）
         # 传播不应基于存储的 bg，而应识别 reverse=True 后跳过
         rev_cell = ('X', (0, 0, 0), (255, 255, 255), MockAttrs(reverse=True))
-        prop.process_cells(0, [rev_cell], "live")
+        prop.process_cells(0, [rev_cell])
 
         empty_row = [(' ', DEFAULT_FG, DEFAULT_BG, MockAttrs())]
-        result = prop.process_cells(1, empty_row, "live")
+        result = prop.process_cells(1, empty_row)
 
         # 不应该被反向视频单元格的存储背景影响
         assert result[0][2] == DEFAULT_BG, (
@@ -198,13 +198,13 @@ class TestBackgroundPropagator:
               被填充为行有效背景色 (0,0,255)
               （渲染器在 widget.py 自行跳过 wide_char_spacer，填充不影响渲染）
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
 
         row = [
             ('字', DEFAULT_FG, (0, 0, 255), MockAttrs(wide_char=True)),
             ('',  DEFAULT_FG, DEFAULT_BG, MockAttrs(wide_char_spacer=True)),
         ]
-        result = prop.process_cells(0, row, "live")
+        result = prop.process_cells(0, row)
 
         # 宽字符的 bg 应保留
         assert result[0][2] == (0, 0, 255), (
@@ -226,14 +226,14 @@ class TestBackgroundPropagator:
         第 1 行: 全空 → 继承蓝色（1 跳）
         第 2-5 行: 全空 → 不继承（上一行背景是继承来的，非自身）
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
         blue = (0, 0, 255)
 
         # 第 0 行：设置缓存（自身背景）
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # 第 1 行：应继承（1 跳）
-        result1 = prop.process_cells(1, make_row([DEFAULT_BG] * 3), "live")
+        result1 = prop.process_cells(1, make_row([DEFAULT_BG] * 3))
         for i, cell in enumerate(result1):
             assert cell[2] == blue, (
                 f"第 1 行 col{i} 应继承蓝色（1跳），实际: {cell[2]}"
@@ -241,7 +241,7 @@ class TestBackgroundPropagator:
 
         # 第 2+ 行：不应继承
         for row_idx in range(2, 6):
-            result = prop.process_cells(row_idx, make_row([DEFAULT_BG] * 3), "live")
+            result = prop.process_cells(row_idx, make_row([DEFAULT_BG] * 3))
             for i, cell in enumerate(result):
                 assert cell[2] == DEFAULT_BG, (
                     f"第 {row_idx} 行 col{i} 不应继承，实际: {cell[2]}"
@@ -254,18 +254,18 @@ class TestBackgroundPropagator:
         先 process_cells 设置缓存，再 reset()
         之后处理空行 → 无缓存可继承，bg 保持 DEFAULT_BG
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
         blue = (0, 0, 255)
 
         # 设置缓存
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # 重置
         prop.reset()
 
         # 空行无缓存可继承
         empty_row = make_row([DEFAULT_BG] * 3)
-        result = prop.process_cells(0, empty_row, "live")
+        result = prop.process_cells(0, empty_row)
 
         for i, cell in enumerate(result):
             assert cell[2] == DEFAULT_BG, (
@@ -280,15 +280,15 @@ class TestBackgroundPropagator:
         再 process_cells 第 0 行全空（scrollback 模式）
         期望: scrollback 模式下 bg 保持 DEFAULT_BG（不跨模式继承）
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
         blue = (0, 0, 255)
 
         # live 模式下设置缓存
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # scrollback 模式下处理空行
         empty_row = make_row([DEFAULT_BG] * 3)
-        result = prop.process_cells(0, empty_row, "scrollback")
+        result = prop.process_cells(0, empty_row, False)
 
         for i, cell in enumerate(result):
             assert cell[2] == DEFAULT_BG, (
@@ -302,17 +302,17 @@ class TestBackgroundPropagator:
         原始 cells 传入后，返回值应是不同对象
         原始 cells 的内容不应被改变
         """
-        prop = _BackgroundPropagator(rows=TEST_ROWS, cols=TEST_COLS)
+        prop = _BackgroundPropagator(rows=TEST_ROWS)
         blue = (0, 0, 255)
 
         # 先设置缓存为蓝色
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # 构建空行
         original = [(' ', DEFAULT_FG, DEFAULT_BG, MockAttrs())]
         original_bg_before = original[0][2]
 
-        result = prop.process_cells(1, original, "live")
+        result = prop.process_cells(1, original)
 
         # 返回的是新列表（不同对象）
         assert result is not original, (
@@ -331,15 +331,14 @@ class TestBackgroundPropagator:
         正确行为：先更新 _rows/_cols，再 reset()。
         模拟 resize：先设新尺寸再 reset，验证缓存长度正确。
         """
-        prop = _BackgroundPropagator(rows=10, cols=80)
+        prop = _BackgroundPropagator(rows=10)
         blue = (0, 0, 255)
 
         # 设置一些缓存
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # 模拟 resize：扩大尺寸
         prop._rows = 30
-        prop._cols = 120
         prop.reset()
 
         # 缓存应正确扩展为 30 行
@@ -351,7 +350,7 @@ class TestBackgroundPropagator:
         )
 
         # 新尺寸下写入不应越界
-        prop.process_cells(29, make_row([blue] * 3), "live")
+        prop.process_cells(29, make_row([blue] * 3))
 
     def test_cross_frame_cache_cleared_by_reset(self):
         """Bug: _row_bg_cache 跨帧持久化导致上一帧颜色残留到下一帧。
@@ -359,18 +358,18 @@ class TestBackgroundPropagator:
         paintEvent 每帧开始时调用 reset()。
         模拟两帧：第一帧设置缓存，reset()，第二帧应无残留。
         """
-        prop = _BackgroundPropagator(rows=10, cols=80)
+        prop = _BackgroundPropagator(rows=10)
         blue = (0, 0, 255)
 
         # Frame 1：设置蓝色背景
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # 帧间 reset（模拟 paintEvent 开头）
         prop.reset()
 
         # Frame 2：空行不应继承上一帧的蓝色
         empty_row = make_row([DEFAULT_BG] * 3)
-        result = prop.process_cells(0, empty_row, "live")
+        result = prop.process_cells(0, empty_row)
         for i, cell in enumerate(result):
             assert cell[2] == DEFAULT_BG, (
                 f"跨帧 reset 后 col{i} 应保持默认黑色，实际: {cell[2]}"
@@ -381,7 +380,7 @@ class TestBackgroundPropagator:
 
         行内同时存在白色(icon)和蓝色(git)两种非默认背景 → 应返回 None，不传播。
         """
-        prop = _BackgroundPropagator(rows=10, cols=80)
+        prop = _BackgroundPropagator(rows=10)
         white = (255, 255, 255)
         blue = (0, 0, 255)
 
@@ -399,7 +398,7 @@ class TestBackgroundPropagator:
             (' ', DEFAULT_FG, DEFAULT_BG, MockAttrs()),         # 空格
             ('$', DEFAULT_FG, DEFAULT_BG, MockAttrs()),         # 提示符
         ]
-        result = prop.process_cells(0, row, "live")
+        result = prop.process_cells(0, row)
 
         # 空格单元格不应被填充（混合背景，不传播）
         assert result[2][2] == DEFAULT_BG, (
@@ -418,19 +417,19 @@ class TestBackgroundPropagator:
         Row 0 有自身蓝色背景 → Row 1 空行继承 → Row 2 应停止
         （Row 1 继承来的背景不缓存，Row 2 无源可继承）
         """
-        prop = _BackgroundPropagator(rows=10, cols=80)
+        prop = _BackgroundPropagator(rows=10)
         blue = (0, 0, 255)
 
         # Row 0：自身蓝色背景
-        prop.process_cells(0, make_row([blue] * 3), "live")
+        prop.process_cells(0, make_row([blue] * 3))
 
         # Row 1：空行，继承蓝色（1 跳）但不缓存
-        result1 = prop.process_cells(1, make_row([DEFAULT_BG] * 3), "live")
+        result1 = prop.process_cells(1, make_row([DEFAULT_BG] * 3))
         for cell in result1:
             assert cell[2] == blue
 
         # Row 2：空行，不应继承（Row 1 背景是继承来的，未缓存）
-        result2 = prop.process_cells(2, make_row([DEFAULT_BG] * 3), "live")
+        result2 = prop.process_cells(2, make_row([DEFAULT_BG] * 3))
         for cell in result2:
             assert cell[2] == DEFAULT_BG, (
                 f"继承来的背景不应被缓存，Row 2 应保持默认，实际: {cell[2]}"

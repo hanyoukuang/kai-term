@@ -118,7 +118,7 @@ class TerminalWidget(QWidget):
         self._cursor_timer.timeout.connect(self._toggle_cursor)
         self._cursor_timer.start(530)
 
-        self._bg_propagator = _BackgroundPropagator(self._rows, self._cols)
+        self._bg_propagator = _BackgroundPropagator(self._rows)
         self._bg_propagation_enabled = True  # kill-switch for emergency rollback
         self._prev_alt_screen = False
 
@@ -324,7 +324,7 @@ class TerminalWidget(QWidget):
         if not cells:
             return
         if self._bg_propagation_enabled:
-            cells = self._bg_propagator.process_cells(sb_idx, cells, "scrollback")
+            cells = self._bg_propagator.process_cells(sb_idx, cells, live=False)
         self._render_cells(painter, cells, y, display_row, sb_idx)
 
     def _draw_live_row(self, painter: QPainter,
@@ -337,7 +337,7 @@ class TerminalWidget(QWidget):
             return
         display_row = live_row + self._scroll_offset
         if self._bg_propagation_enabled:
-            cells = self._bg_propagator.process_cells(live_row, cells, "live")
+            cells = self._bg_propagator.process_cells(live_row, cells)
         self._render_cells(painter, cells, y, display_row, live_row)
 
     def _render_cells(self, painter: QPainter, cells: list,
@@ -1016,7 +1016,6 @@ class TerminalWidget(QWidget):
             self._term.resize(self._cols, self._rows)
             self._mouse_term.resize(self._cols, self._rows)
             self._bg_propagator._rows = self._rows
-            self._bg_propagator._cols = self._cols
             self._bg_propagator.reset()
 
         self.update()
