@@ -78,6 +78,7 @@ class TerminalWidget(QWidget):
         self._blink_visible = True
         self._generation = 0
         self._display_only = display_only
+        self._prev_cursor = (-1, -1)
         self._prev_title = ""
         self._prev_clipboard = ""
         self._prev_cwd = ""
@@ -201,6 +202,17 @@ class TerminalWidget(QWidget):
                 elif not self._unseen_output:
                     self._unseen_output = True
                     self.update()
+            elif sys.platform == "win32":
+                # Windows: has_updates_since unreliable, fallback to cursor check
+                try:
+                    cur = self._term.cursor_position()
+                    if cur != self._prev_cursor:
+                        self._generation = self._term.update_generation()
+                        self._stale_polls = 0
+                        self.update()
+                    self._prev_cursor = cur
+                except Exception:
+                    pass
             else:
                 self._stale_polls += 1
                 if self._stale_polls == 60:
