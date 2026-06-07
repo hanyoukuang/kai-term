@@ -154,19 +154,11 @@ class TerminalWidget(QWidget):
             self._on_session_ended()
 
     def _on_session_ended(self) -> None:
-        """Handle PTY session end: restore primary screen if stuck in alt screen,
-        hide cursor, notify UI, continue polling briefly for residual output."""
+        """Handle PTY session end: hide cursor, notify UI, continue polling
+        briefly to drain residual output, then stop timers."""
         if self._session_ended:
             return
         self._session_ended = True
-
-        # 尝试恢复主屏幕（openCode 等 TUI 被杀时来不及发 \x1b[?1049l）
-        try:
-            if (hasattr(self._term, 'is_alt_screen_active')
-                    and self._term.is_alt_screen_active()):
-                self._term.write_str("\x1b[?1049l")
-        except Exception:
-            pass
         self._cursor_timer.stop()
         self._cursor_visible = False
         self._idle_polls = 0
