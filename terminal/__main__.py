@@ -6,15 +6,15 @@ Usage:
   echo -e '\\x1b[31mRED\\x1b[0m' | pyqterminal --display
 """
 
-import sys
 import argparse
 import logging
+import sys
 
-from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication
 
-from terminal.widget import TerminalWidget
 from terminal import __version__
+from terminal.widget import TerminalWidget
 
 
 def main() -> None:

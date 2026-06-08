@@ -50,6 +50,7 @@ def run_bce_test() -> int:
         Number of failures (0 = all good).
     """
     from par_term_emu_core_rust import Terminal
+
     from terminal.background_propagator import _BackgroundPropagator
 
     term = Terminal(40, 12)
@@ -88,7 +89,7 @@ def run_bce_test() -> int:
     print("  Each row:  [label] | visual fill (first 30 columns)")
     print()
 
-    for row_idx, (desc, seq, label) in enumerate(tests):
+    for row_idx, (_desc, seq, label) in enumerate(tests):
         # Feed escape sequence to terminal
         term.process_str(seq)
 

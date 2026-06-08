@@ -6,7 +6,6 @@ _BackgroundPropagator 负责将非默认背景色向下传播到空单元格，
 所有测试在 Task 2 实现完成前预期全部 FAIL（TDD RED 阶段）。
 """
 
-import pytest
 from terminal.background_propagator import _BackgroundPropagator
 
 # 默认前景色 (192,192,192)，与 widget.py DEFAULT_FG 一致

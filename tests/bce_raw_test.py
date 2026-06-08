@@ -47,12 +47,7 @@ def main() -> None:
         bg_trail = cells[20][2] if len(cells) > 20 else cells[-1][2]  # col 20 — trailing
 
         has_el = "+EL" in label
-        if has_el:
-            # With EL: trailing should match expected bg
-            trail_ok = bg_trail == expected_bg
-        else:
-            # No EL: trailing never written → should be (0,0,0)
-            trail_ok = bg_trail == (0, 0, 0)
+        trail_ok = bg_trail == expected_bg if has_el else bg_trail == (0, 0, 0)
 
         icon = "\033[32mOK\033[0m" if trail_ok else "\033[31mFAIL\033[0m"
 

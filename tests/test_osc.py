@@ -4,9 +4,10 @@ Usage:
     uv run python tests/test_osc.py | uv run python main.py --display
 """
 
+import base64
 import sys
 import time
-import base64
+
 
 def osc(code, payload=""):
     """Write an OSC escape sequence."""

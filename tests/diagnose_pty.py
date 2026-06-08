@@ -9,6 +9,7 @@ Usage:
 """
 
 import time
+
 from par_term_emu_core_rust import PtyTerminal
 
 
