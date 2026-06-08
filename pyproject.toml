@@ -1,6 +1,6 @@
 [project]
 name = "pyqterminal"
-version = "0.2.1"
+version = "0.2.2"
 description = "A cross-platform terminal emulator with Rust backend and PySide6 frontend"
 readme = "README.md"
 license = { text = "MIT" }
@@ -9,7 +9,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "par-term-emu-core-rust>=0.42.3",
+    "par-term-emu-core-rust>=0.42.4",
     "pyside6>=6.11.1",
 ]
 classifiers = [

@@ -18,6 +18,7 @@
 | 8 | 06-04 | Phase 6 | ~~高亮不消失~~（非 Bug，见下方） + 无复制通知 + SGR 鼠标编码 Bug | `_send_mouse_event` 中 `mouse_encoding().name` 永远失败，SGR 编码从未启用 | 修复 SGR 编码检测 + 记录高亮行为规范 |
 | 9 | 06-05 | Phase 6 | Windows 上 openCode 等 TUI 背景渲染异常 | Rust vte 后端对未写入单元格返回 `bg=(0,0,0)`，不会自动扩展当前 SGR 背景色 | 渲染层添加行级背景填充（`last_bg` 机制）：行首扫描有效背景色 → 整行铺设 → 单格差异覆盖 + `_active_bg` 跨行缓存。不改动 `cell_data`，兼容 nano/macOS |
 | 10 | 06-06 | Wave 1 | openCode等TUI应用在Windows上背景显示为黑色（macOS正常） | Rust vte后端仅记录被显式写入单元格的bg，未写入单元格返回bg=(0,0,0)。Windows conpty可能不传递某些擦除序列。 | 添加_BackgroundPropagator预处理层：行级缓存+向上继承。交互模式和显示模式均支持。live模式使用跨行缓存，scrollback模式仅行内扫描。resize和Alt Screen切换时reset()清除缓存。已知限制：无法区分"有意黑色"与"未写入"——采用启发式（有文本内容的单元格视为有意设置） |
+| 11 | 06-08 | — | Windows 上 Ctrl+C 后终端界面卡死不刷新 | `has_updates_since()` 的 generation counter 在 PTY 读取线程处理完整个块后才递增。Ctrl+C 的 CTRL_C_EVENT 可能导致处理 panic，计数器永远不递增，即使数据已写入 grid buffer。 | 上游 par-term-emu-core-rust v0.42.4 将 `fetch_add(1)` 移到 `reader.read()` 成功后立即执行（处理之前），确保计数器在任何情况下都递增。pyqterminal 端删除了光标位置兜底方案和 `_stale_polls` 强制 flush workaround。
 
 ---
 

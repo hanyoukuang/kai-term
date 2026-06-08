@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.2] — 2026-06-08
+
+### Changed
+- Upgraded `par-term-emu-core-rust` to ≥0.42.4 — fixes `has_updates_since()` counter stall on Windows Ctrl+C (#60, #61).
+- Removed Windows cursor-polling fallback and `_stale_polls` forced-flush workaround, no longer needed after upstream fix.
+- `_poll_updates()` simplified: the `elif sys.platform == "win32"` branch and stale-poll counter logic removed.
+
+### Documentation
+- `ERRORS.md` — added error #11 documenting the Windows Ctrl+C freeze root cause and resolution.
+
 ## [0.2.1] — 2026-06-08
 
 ### Added
