@@ -68,6 +68,7 @@ class TerminalWidget(QWidget):
         self._blink_visible = True
         self._generation = 0
         self._display_only = display_only
+        self._stale_polls = 0
         self._prev_title = ""
         self._prev_clipboard = ""
         self._prev_cwd = ""
@@ -126,6 +127,7 @@ class TerminalWidget(QWidget):
         try:
             self._term.spawn_shell()
             self._session_ended = False
+            self._stale_polls = 0
             _log.info("PTY session started")
         except Exception:
             _log.exception("spawn_shell failed")
@@ -137,6 +139,7 @@ class TerminalWidget(QWidget):
         self._clear_selection()
         try:
             self._term.spawn_shell()
+            self._stale_polls = 0
             self.update()
         except Exception:
             _log.exception("session restart failed")
@@ -199,12 +202,20 @@ class TerminalWidget(QWidget):
                     pass
             if self._term.has_updates_since(self._generation):
                 self._generation = self._term.update_generation()
+                self._stale_polls = 0
                 if self._scroll_offset == 0:
                     self._unseen_output = False
                     self.update()
                 elif not self._unseen_output:
                     self._unseen_output = True
                     self.update()
+            else:
+                self._stale_polls += 1
+                if self._stale_polls == 60:
+                    with suppress(Exception):
+                        if self._term.synchronized_updates():
+                            _log.warning("synchronized_updates stuck, forcing flush")
+                            self._term.flush_synchronized_updates()
 
             with suppress(Exception):
                 self._term.drain_responses()
