@@ -1,0 +1,11 @@
+{
+  "typeCheckingMode": "basic",
+  "reportAttributeAccessIssue": false,
+  "exclude": [
+    "**/__pycache__",
+    ".venv",
+    "tests/bce_*.py",
+    "tests/diagnose_pty.py",
+    "tests/test_osc*.py"
+  ]
+}
