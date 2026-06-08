@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.2.1] — 2026-06-08
+
+### Added
+- Session restart: press any key after shell exits to spawn a new session.
+- Debug logging at 7 key points (PTY write, resize, font size, alt screen, OSC bridge).
+- Unit tests: 38 for `InputHandler`, 20 for `block_chars`.
+
+### Changed
+- Log level raised from `INFO` to `DEBUG` for full diagnostic output.
+- `contextlib.suppress` replaces bare `try/except/pass` in hot paths.
+
+### Added (tooling)
+- `ruff` linter/formatter with E/W/F/I/B/C4/SIM/UP rulesets.
+- `mypy` type checker with PySide6 `attr-defined` suppression.
+- `basedpyright` type checker with `basic` mode, `reportAttributeAccessIssue` disabled.
+
+### Changed (refactor)
+- `_draw_block_fill()` extracted to `terminal/block_chars.py` (55 lines).
+- Font candidates, `_pick_monospace_font()`, and default colors extracted to `terminal/theme.py` (35 lines).
+- `widget.py` reduced from 1088 to 1048 lines.
+
+### Documentation
+- `CODING_STANDARDS.md` — PEP8, code splitting, comments, implementation, logging, testing, Git.
+- `HISTORY.md` — external library change history and class/method addition timeline.
+
+## [0.2.0] — 2026-06-05
+
+### Added
+- Background color propagation (`_BackgroundPropagator`) for unwritten cells in TUI apps.
+- OSC 7 (current directory), OSC 9/777 (notifications), OSC 52 (clipboard) bridge.
+- `title_changed`, `process_exited`, `bell_rang`, `selection_copied`, `notification_received`, `cwd_changed`, `progress_changed` signals.
+- Mouse event forwarding to PTY when terminal apps enable mouse tracking.
+- Context menu with Copy, Paste, Zoom In/Out/Reset.
+
+### Fixed
+- Windows: has_updates_since unreliable → fallback to cursor position polling.
+- Windows: synchronized_updates stall → flush after 60 stale polls (1s).
+- PTY write RuntimeError on session end → guarded with `_session_ended` flag.
+- BCE (Background Color Erase) fixed upstream in par-term-emu-core-rust v0.42.3.
+
+### Changed
+- Upgraded to `par-term-emu-core-rust` ≥ 0.42.3 for BCE support.
+
 ## [0.1.4] — 2026-06-04
 
 ### Added
