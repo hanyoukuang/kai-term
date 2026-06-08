@@ -24,9 +24,7 @@ class _BackgroundPropagator:
             return False
         if char and char not in ("", " ", "\x00"):
             return False
-        if attrs and attrs.reverse:
-            return False
-        return True
+        return not (attrs and attrs.reverse)
 
     # ── 行背景推断 ─────────────────────────────────────────────────────
 
@@ -55,14 +53,13 @@ class _BackgroundPropagator:
         """
         own_bg = self._row_bg(cells)
 
+        eff_bg: tuple[int, int, int] | None = None
         if own_bg is not None:
             eff_bg = own_bg
             if live and 0 <= row_idx < self._rows:
                 self._row_bg_cache[row_idx] = eff_bg
         elif live and row_idx > 0:
             eff_bg = self._row_bg_cache[row_idx - 1]
-        else:
-            eff_bg = None
 
         if eff_bg is None:
             return cells

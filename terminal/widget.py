@@ -1,39 +1,31 @@
-from par_term_emu_core_rust import PtyTerminal, CursorStyle, UnderlineStyle, Terminal, MouseEncoding
-from PySide6.QtWidgets import QWidget, QApplication, QMenu
-from PySide6.QtCore import QTimer, Qt, QRectF, Signal
-from PySide6.QtGui import (
-    QPainter, QFont, QFontMetrics, QColor,
-    QKeyEvent, QPaintEvent, QResizeEvent,
-    QWheelEvent, QMouseEvent, QAction,
-    QInputMethodEvent, QPainterPath,
-)
-import sys
 import logging
+import sys
+from contextlib import suppress
 
-from .input_handler import InputHandler
+from par_term_emu_core_rust import CursorStyle, MouseEncoding, PtyTerminal, Terminal, UnderlineStyle
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QFont,
+    QFontMetrics,
+    QInputMethodEvent,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPainterPath,
+    QPaintEvent,
+    QResizeEvent,
+    QWheelEvent,
+)
+from PySide6.QtWidgets import QApplication, QMenu, QWidget
+
 from .background_propagator import _BackgroundPropagator
+from .block_chars import draw_block_fill
+from .input_handler import InputHandler
+from .theme import DEFAULT_BG, DEFAULT_FG, pick_monospace_font
 
 _log = logging.getLogger(__name__)
-
-
-_FONT_CANDIDATES = (
-    "MesloLGS NF", "JetBrainsMono Nerd Font",
-    "FiraCode Nerd Font", "CaskaydiaCove Nerd Font",
-    "Hack Nerd Font", "DejaVuSansMono Nerd Font",
-    "SF Mono", "JetBrains Mono", "Fira Code",
-    "Menlo", "Courier New", "monospace",
-)
-
-
-def _pick_monospace_font(size: int = 13) -> QFont:
-    for family in _FONT_CANDIDATES:
-        font = QFont(family, size)
-        font.setStyleHint(QFont.Monospace)
-        font.setHintingPreference(QFont.PreferVerticalHinting)
-        fm = QFontMetrics(font)
-        if fm.horizontalAdvance("M") > 0:
-            return font
-    return QFont("monospace", size)
 
 
 class TerminalWidget(QWidget):
@@ -46,8 +38,6 @@ class TerminalWidget(QWidget):
     cwd_changed = Signal(str)         # OSC 7 current directory changed
     progress_changed = Signal(int, int)  # OSC 9;4 progress (state, value 0-100)
 
-    DEFAULT_FG = QColor(192, 192, 192)
-    DEFAULT_BG = QColor(0, 0, 0)
     SELECTION_BG = QColor(80, 80, 80)
 
     def __init__(self, parent=None, rows: int = 24, cols: int = 80,
@@ -64,7 +54,7 @@ class TerminalWidget(QWidget):
             self._font.setStyleHint(QFont.Monospace)
             self._font.setHintingPreference(QFont.PreferVerticalHinting)
         else:
-            self._font = _pick_monospace_font(font_size)
+            self._font = pick_monospace_font(font_size)
         self._fm = QFontMetrics(self._font)
         self._cell_w = int(max(self._fm.horizontalAdvance("M"), 1))
         self._cell_h = int(max(self._fm.height(), 1))
@@ -105,7 +95,7 @@ class TerminalWidget(QWidget):
         self._selecting = False
         self._mouse_held = False
         self._last_motion_cell = (-1, -1)
-        self._drag_start_pos = None
+        self._drag_start_pos: QPointF | None = None
         self._drag_start_cell = (0, 0)
         self._preedit = ""
 
@@ -145,6 +135,7 @@ class TerminalWidget(QWidget):
     def _write_to_pty(self, data: bytes | str) -> None:
         """Write to PTY, silently ignoring if session has ended."""
         if self._session_ended:
+            _log.debug("write_to_pty blocked: session already ended")
             return
         try:
             if isinstance(data, bytes):
@@ -152,6 +143,7 @@ class TerminalWidget(QWidget):
             else:
                 self._term.write_str(data)
         except RuntimeError:
+            _log.warning("PTY write failed, session ended")
             self._session_ended = True
             self.process_exited.emit(-1)
 
@@ -166,6 +158,7 @@ class TerminalWidget(QWidget):
         """
         if not self._display_only:
             raise RuntimeError("feed() only available in display-only mode")
+        _log.debug("feed: %d chars", len(data))
         self._term.process_str(data)
         self._bridge_osc()
         self.update()
@@ -189,6 +182,7 @@ class TerminalWidget(QWidget):
                     is_alt = self._term.is_alt_screen_active()
                     prev = getattr(self, '_prev_alt_screen', False)
                     if is_alt != prev:
+                        _log.debug("alt screen: %s -> %s", prev, is_alt)
                         self._bg_propagator.reset()
                         self._prev_alt_screen = is_alt
                 except Exception:
@@ -223,10 +217,8 @@ class TerminalWidget(QWidget):
                     except Exception:
                         pass
 
-            try:
+            with suppress(Exception):
                 self._term.drain_responses()
-            except Exception:
-                pass
 
             self._sync_mouse_term()
             self._bridge_osc()
@@ -237,6 +229,7 @@ class TerminalWidget(QWidget):
         try:
             title = self._term.title()
             if title and title != self._prev_title:
+                _log.debug("title changed: %r -> %r", self._prev_title, title)
                 self._prev_title = title
                 self.title_changed.emit(title)
         except Exception:
@@ -255,6 +248,7 @@ class TerminalWidget(QWidget):
         try:
             cwd = self._term.current_directory()
             if cwd and cwd != self._prev_cwd:
+                _log.debug("cwd changed: %r", cwd)
                 self._prev_cwd = cwd
                 self.cwd_changed.emit(cwd)
         except Exception:
@@ -264,6 +258,7 @@ class TerminalWidget(QWidget):
         try:
             if self._term.has_notifications():
                 for title, msg in self._term.drain_notifications():
+                    _log.debug("OSC notification: %r: %r", title, msg)
                     self.notification_received.emit(title or "", msg)
                     self._os_notify(title or "", msg)
         except Exception:
@@ -302,8 +297,8 @@ class TerminalWidget(QWidget):
         try:
             mode = self._term.mouse_mode()
             if mode != "off":
-                self._mouse_term.process_str(f"\x1b[?1002h")
-                self._mouse_term.process_str(f"\x1b[?1006h")
+                self._mouse_term.process_str("\x1b[?1002h")
+                self._mouse_term.process_str("\x1b[?1006h")
         except Exception:
             pass
 
@@ -313,7 +308,7 @@ class TerminalWidget(QWidget):
         painter = QPainter(self)
         try:
             painter.setFont(self._font)
-            painter.fillRect(self.rect(), self.DEFAULT_BG)
+            painter.fillRect(self.rect(), DEFAULT_BG)
 
             # 每帧开始时重置传播缓存，避免上一帧的颜色残留在下一帧
             self._bg_propagator.reset()
@@ -406,10 +401,8 @@ class TerminalWidget(QWidget):
 
             hyperlink = ""
             if buffer_row >= 0:
-                try:
+                with suppress(Exception):
                     hyperlink = self._term.get_hyperlink(col, buffer_row) or ""
-                except Exception:
-                    pass
 
             cell_data.append({
                 'x': x, 'cell_w': cell_w, 'char': char,
@@ -471,8 +464,8 @@ class TerminalWidget(QWidget):
             painter.save()
 
             is_block = len(char) == 1 and 0x2580 <= ord(char) <= 0x259F
-            if is_block and self._draw_block_fill(painter, char, x, y,
-                                                   cell_w, self._cell_h, fg_rgb):
+            if is_block and draw_block_fill(painter, char, x, y,
+                                             cell_w, self._cell_h, fg_rgb):
                 pass  # drawn as filled rect — seamless, no gaps
             elif is_block:
                 painter.setClipRect(x, y, cell_w, self._cell_h)
@@ -516,46 +509,6 @@ class TerminalWidget(QWidget):
         painter.setBrush(QColor(*fg_rgb))
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.drawPath(path)
-
-    @staticmethod
-    def _draw_block_fill(painter: QPainter, char: str, x: int, y: int,
-                          cell_w: int, cell_h: int, fg_rgb: tuple) -> bool:
-        """Draw Unicode block element (U+2580–U+259F) as filled rectangle.
-
-        Returns True if drawn, False to fallback to font rendering.
-        Draws as filled rect to eliminate sub-pixel gaps between adjacent cells.
-        """
-        cp = ord(char)
-        color = QColor(*fg_rgb)
-
-        if cp == 0x2588:                          # █ FULL BLOCK
-            painter.fillRect(x, y, cell_w, cell_h, color)
-        elif cp == 0x2580:                        # ▀ UPPER HALF BLOCK
-            painter.fillRect(x, y, cell_w, cell_h // 2, color)
-        elif cp == 0x2584:                        # ▄ LOWER HALF BLOCK
-            half = cell_h // 2
-            painter.fillRect(x, y + half, cell_w, cell_h - half, color)
-        elif cp == 0x258C:                        # ▌ LEFT HALF BLOCK
-            painter.fillRect(x, y, cell_w // 2, cell_h, color)
-        elif cp == 0x2590:                        # ▐ RIGHT HALF BLOCK
-            half = cell_w // 2
-            painter.fillRect(x + half, y, cell_w - half, cell_h, color)
-        elif 0x2581 <= cp <= 0x2587:              # ▁-▇ Lower 1/8 … 7/8
-            frac = (cp - 0x2580) / 8
-            fill_h = max(1, int(cell_h * frac))
-            painter.fillRect(x, y + cell_h - fill_h, cell_w, fill_h, color)
-        elif 0x2589 <= cp <= 0x258F:              # ▉-▏ Left 7/8 … 1/8
-            frac = (0x2590 - cp) / 8
-            fill_w = max(1, int(cell_w * frac))
-            painter.fillRect(x, y, fill_w, cell_h, color)
-        elif cp == 0x2594:                        # ▔ UPPER 1/8 BLOCK
-            painter.fillRect(x, y, cell_w, max(1, cell_h // 8), color)
-        elif cp == 0x2595:                        # ▕ RIGHT 1/8 BLOCK
-            fill_w = max(1, cell_w // 8)
-            painter.fillRect(x + cell_w - fill_w, y, fill_w, cell_h, color)
-        else:
-            return False  # shade / quadrant — use font
-        return True
 
     @staticmethod
     def _draw_underline(painter: QPainter, x: int, base_y: int,
@@ -614,11 +567,11 @@ class TerminalWidget(QWidget):
 
         if style in _UNDERLINE:
             painter.fillRect(x, y + self._cell_h - 2, self._cell_w, 2,
-                             self.DEFAULT_FG)
+                             DEFAULT_FG)
         elif style in _BAR:
-            painter.fillRect(x, y, 2, self._cell_h, self.DEFAULT_FG)
+            painter.fillRect(x, y, 2, self._cell_h, DEFAULT_FG)
         else:
-            painter.fillRect(x, y, self._cell_w, self._cell_h, self.DEFAULT_FG)
+            painter.fillRect(x, y, self._cell_w, self._cell_h, DEFAULT_FG)
 
     def _draw_preedit(self, painter: QPainter) -> None:
         try:
@@ -632,10 +585,10 @@ class TerminalWidget(QWidget):
         y = cy * self._cell_h
         preedit_w = len(self._preedit) * self._cell_w
 
-        painter.fillRect(x, y, preedit_w, self._cell_h, self.DEFAULT_BG)
+        painter.fillRect(x, y, preedit_w, self._cell_h, DEFAULT_BG)
 
         painter.setFont(self._font)
-        painter.setPen(self.DEFAULT_FG)
+        painter.setPen(DEFAULT_FG)
         painter.drawText(x, int(y + self._fm.ascent()), self._preedit)
 
         ul_y = y + self._cell_h - 2
@@ -644,7 +597,7 @@ class TerminalWidget(QWidget):
         if self._cursor_visible:
             cx_end = x + preedit_w
             painter.fillRect(cx_end, y, self._cell_w, self._cell_h,
-                             self.DEFAULT_FG)
+                             DEFAULT_FG)
 
     # ── Selection ────────────────────────────────────────────────────────
 
@@ -701,7 +654,7 @@ class TerminalWidget(QWidget):
             ec = c2 if r == r2 else self._cols - 1
 
             line_str = ""
-            for col, (char, fg, bg, attrs) in enumerate(cells):
+            for col, (char, _fg, _bg, attrs) in enumerate(cells):
                 if col > ec:
                     break
                 if col >= sc:
@@ -731,8 +684,8 @@ class TerminalWidget(QWidget):
         live_row = row - self._scroll_offset
         try:
             if live_row < 0:
-                sb_idx = self._term.scrollback_len() + live_row
-                return ""  # scrollback hyperlinks not yet supported
+                # scrollback hyperlinks not yet supported
+                return ""
             elif live_row < self._rows:
                 return self._term.get_hyperlink(col, live_row) or ""
         except Exception:
@@ -746,7 +699,7 @@ class TerminalWidget(QWidget):
         if self._display_only:
             return False
         try:
-            return self._term.mouse_mode() != "off"
+            return bool(self._term.mouse_mode() != "off")
         except Exception:
             return False
 
@@ -809,6 +762,7 @@ class TerminalWidget(QWidget):
         if event.button() == Qt.LeftButton and (event.modifiers() & Qt.ControlModifier):
             link = self._hyperlink_at(col, row)
             if link:
+                _log.debug("opening hyperlink: %s", link)
                 import webbrowser
                 webbrowser.open(link)
                 return
@@ -916,9 +870,11 @@ class TerminalWidget(QWidget):
 
     def _paste_clipboard(self) -> None:
         if self._display_only:
+            _log.debug("paste blocked: display-only mode")
             return
         text = QApplication.clipboard().text()
         if text:
+            _log.debug("paste: %d chars", len(text))
             self._paste_text(text)
 
     def _paste_text(self, text: str) -> None:
@@ -1049,6 +1005,8 @@ class TerminalWidget(QWidget):
         new_rows = max(1, self.height() // self._cell_h)
 
         if new_cols != self._cols or new_rows != self._rows:
+            _log.debug("resize: %dx%d -> %dx%d", self._cols, self._rows,
+                       new_cols, new_rows)
             self._cols = new_cols
             self._rows = new_rows
             self._term.resize(self._cols, self._rows)
@@ -1067,7 +1025,9 @@ class TerminalWidget(QWidget):
 
     def _change_font_size(self, delta: int) -> None:
         size = max(6, min(32, self._font.pointSize() + delta))
-        self._font = _pick_monospace_font(size)
+        _log.debug("font size: %dpt -> %dpt (delta=%+d)",
+                   self._font.pointSize(), size, delta)
+        self._font = pick_monospace_font(size)
         self._fm = QFontMetrics(self._font)
         self._cell_w = int(max(self._fm.horizontalAdvance("M"), 1))
         self._cell_h = int(max(self._fm.height(), 1))
