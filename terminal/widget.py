@@ -131,7 +131,10 @@ class TerminalWidget(QWidget):
                 # The PTY child process inside ConPTY will still receive the event.
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
                 import ctypes
-                ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 1)
+                from ctypes import wintypes
+                global _widget_win_ctrl_handler
+                _widget_win_ctrl_handler = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)(lambda _: True)
+                ctypes.windll.kernel32.SetConsoleCtrlHandler(_widget_win_ctrl_handler, True)
             except Exception:
                 pass
         try:

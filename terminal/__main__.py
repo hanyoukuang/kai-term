@@ -23,7 +23,11 @@ def main() -> None:
         try:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             import ctypes
-            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 1)
+            from ctypes import wintypes
+            # Keep a global reference to prevent garbage collection
+            global _win_ctrl_handler
+            _win_ctrl_handler = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)(lambda _: True)
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(_win_ctrl_handler, True)
         except Exception:
             pass
 
