@@ -124,6 +124,14 @@ class TerminalWidget(QWidget):
         """Start interactive shell (PtyTerminal mode only)."""
         if self._display_only:
             raise RuntimeError("start_shell() not available in display-only mode")
+        if sys.platform == "win32":
+            import signal
+            try:
+                # Ignore SIGINT to prevent CTRL_C_EVENT from crashing Python process.
+                # The PTY child process inside ConPTY will still receive the event.
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
+            except Exception:
+                pass
         try:
             self._term.spawn_shell()
             self._session_ended = False
@@ -138,6 +146,9 @@ class TerminalWidget(QWidget):
         self._session_ended = False
         self._clear_selection()
         try:
+            # Recreate the terminal to prevent calling spawn_shell on a dead PTY.
+            self._term = PtyTerminal(self._cols, self._rows, scrollback=10000)
+            self._term.set_accept_osc7(True)
             self._term.spawn_shell()
             self._stale_polls = 0
             self.update()
@@ -648,7 +659,10 @@ class TerminalWidget(QWidget):
             r1, c1, r2, c2 = r2, c2, r1, c1
 
         lines = []
-        sb_len = self._term.scrollback_len()
+        try:
+            sb_len = self._term.scrollback_len()
+        except Exception:
+            sb_len = 0
         for r in range(r1, r2 + 1):
             live_row = r - self._scroll_offset
             if live_row < 0:
@@ -905,6 +919,12 @@ class TerminalWidget(QWidget):
             self._write_to_pty(text)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
+        try:
+            self._wheel_impl(event)
+        except Exception:
+            _log.exception("wheelEvent failed")
+
+    def _wheel_impl(self, event: QWheelEvent) -> None:
         if self._display_only:
             return
 
@@ -915,10 +935,19 @@ class TerminalWidget(QWidget):
             return
         self._wheel_accum %= threshold
 
-        if self._term.mouse_mode() != "off":
+        try:
+            is_mouse_active = self._term.mouse_mode() != "off"
+        except Exception:
+            is_mouse_active = False
+
+        if is_mouse_active:
             self._send_mouse_wheel(event, lines)
         else:
-            max_scroll = max(self._term.scrollback_len(), self._rows * 100)
+            try:
+                sb_len = self._term.scrollback_len()
+            except Exception:
+                sb_len = 0
+            max_scroll = max(sb_len, self._rows * 100)
             self._scroll_offset = max(0, min(max_scroll,
                                       self._scroll_offset - lines))
             self.update()
@@ -1030,7 +1059,10 @@ class TerminalWidget(QWidget):
                        new_cols, new_rows)
             self._cols = new_cols
             self._rows = new_rows
-            self._term.resize(self._cols, self._rows)
+            try:
+                self._term.resize(self._cols, self._rows)
+            except RuntimeError:
+                _log.warning("PTY resize failed in resizeEvent (cols=%s rows=%s)", self._cols, self._rows)
             self._mouse_term.resize(self._cols, self._rows)
             self._bg_propagator._rows = self._rows
             self._bg_propagator.reset()
@@ -1065,5 +1097,8 @@ class TerminalWidget(QWidget):
         new_rows = max(1, self.height() // self._cell_h)
         self._cols = new_cols
         self._rows = new_rows
-        self._term.resize(self._cols, self._rows)
+        try:
+            self._term.resize(self._cols, self._rows)
+        except RuntimeError:
+            _log.warning("PTY resize failed in _change_font_size (cols=%s rows=%s)", self._cols, self._rows)
         self.update()

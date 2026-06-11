@@ -18,6 +18,13 @@ from terminal.widget import TerminalWidget
 
 
 def main() -> None:
+    import signal
+    if sys.platform == "win32":
+        try:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(
         description="pyqterminal — cross-platform terminal emulator",
     )
