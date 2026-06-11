@@ -1,6 +1,6 @@
 [project]
 name = "pyqterminal"
-version = "0.2.3"
+version = "0.2.4"
 description = "A cross-platform terminal emulator with Rust backend and PySide6 frontend"
 readme = "README.md"
 license = { text = "MIT" }
@@ -32,6 +32,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.setuptools.package-data]
+terminal = ["assets/fonts/*.ttf"]
 
 [tool.uv]
 package = true

@@ -75,8 +75,9 @@
 | 06-04 | `_draw_block_fill()` | Unicode 块字符无缝渲染（消除子像素间隙） |
 | 06-04 | `_draw_text_path()` | Nerd Font glyph counter 保持（ERRORS.md 实际修复） |
 | 06-05 | `_BackgroundPropagator` 集成 | openCode 等 TUI 背景渲染异常（ERRORS.md #9） |
-| 06-06 | `_BackgroundPropagator` 重写 | 行级缓存 + 向上继承（ERRORS.md #10） |
 | 06-11 | PTY 实例重建 / 异常保护 | 修复 Windows 下 TUI 按 Ctrl+C 导致的退出闪退与会话重启崩溃（ERRORS.md #12） |
+| 06-11 | QFontDatabase 动态字体加载 / 智能裁剪 | 自带并默认加载 JetBrains Mono Nerd Font，解决跨平台字体不一致；宽图标及 Emoji 裁剪宽度放宽，解决右侧边缘被截断问题 |
+
 
 **信号添加**：
 
@@ -162,5 +163,5 @@
 | 2026-06-04 | `API.md` + `API_zh.md` | 创建 API 参考 |
 | 2026-06-04 | `README.md` + `README_zh.md` | 创建项目 README |
 | 2026-06-08 | `CODING_STANDARDS.md` | 创建编程规范文档 |
-| 2026-06-08 | `HISTORY.md` | 创建项目历史文档（本文件） |
-| 2026-06-11 | `CHANGELOG.md`/`ERRORS.md`/`HISTORY.md` | 记录版本 0.2.3 发布与 Windows Ctrl+C 闪退问题修复 |
+| 2026-06-11 | `CHANGELOG.md`/`ERRORS.md`/`HISTORY.md` | 记录版本 0.2.3/0.2.4 发布，以及自带字体、Nerd Font 图标剪裁、Windows Ctrl+C 闪退问题修复 |
+

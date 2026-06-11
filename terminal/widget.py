@@ -500,7 +500,19 @@ class TerminalWidget(QWidget):
                 painter.setClipRect(x, y, cell_w, self._cell_h)
                 self._draw_text_path(painter, char, x, y, fg_rgb)
             else:
-                painter.setClipRect(x - 2, y - 2, cell_w + 4, self._cell_h + 4)
+                # Allow horizontal overflow for icons and special symbols to prevent them from being cut off.
+                val = ord(char[0]) if char else 0
+                is_icon_or_symbol = (
+                    0xE000 <= val <= 0xF8FF or      # BMP PUA (Nerd Fonts)
+                    0xF0000 <= val <= 0xFFFFD or    # Plane 15 PUA (Nerd Fonts)
+                    0x100000 <= val <= 0x10FFFD or  # Plane 16 PUA (Nerd Fonts)
+                    0x2190 <= val <= 0x2BFF or      # Arrows & Mathematical/Misc Symbols
+                    0x1F000 <= val <= 0x1FFFF       # Emojis & Misc Symbols/Pictographs
+                )
+                if is_icon_or_symbol:
+                    painter.setClipRect(x - 2, y - 2, cell_w + self._cell_w * 2, self._cell_h + 4)
+                else:
+                    painter.setClipRect(x - 2, y - 2, cell_w + 4, self._cell_h + 4)
                 self._draw_text_path(painter, char, x, y, fg_rgb)
 
             if attrs and attrs.strikethrough:

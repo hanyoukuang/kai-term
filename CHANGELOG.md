@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.4] — 2026-06-11
+
+### Added
+- Bundled font support: Added `JetBrainsMonoNerdFont-Regular.ttf` in package assets.
+- Dynamic font loading: Dynamically load the bundled font using `QFontDatabase` at startup to ensure consistent terminal appearance across macOS and Windows.
+- Configured setuptools packaging to include `.ttf` font files in `pyproject.toml`.
+
+### Fixed
+- Nerd Font clipping: Widened the clipping rectangle (adding 2 extra cell widths) for PUA characters, symbols, and emojis to prevent wide Nerd Font icons from being sliced/cut off on the right edge.
+
+### Changed
+- Upgraded `pyqterminal` version to `0.2.4`.
+
 ## [0.2.3] — 2026-06-11
 
 ### Fixed
