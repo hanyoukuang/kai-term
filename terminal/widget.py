@@ -130,6 +130,8 @@ class TerminalWidget(QWidget):
                 # Ignore SIGINT to prevent CTRL_C_EVENT from crashing Python process.
                 # The PTY child process inside ConPTY will still receive the event.
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
+                import ctypes
+                ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 1)
             except Exception:
                 pass
         try:
@@ -375,7 +377,10 @@ class TerminalWidget(QWidget):
 
     def _draw_scrollback_row(self, painter: QPainter,
                               display_row: int, y: int) -> None:
-        sb_len = self._term.scrollback_len()
+        try:
+            sb_len = self._term.scrollback_len()
+        except Exception:
+            return
         sb_idx = sb_len - self._scroll_offset + display_row
         if sb_idx < 0 or sb_idx >= sb_len:
             return

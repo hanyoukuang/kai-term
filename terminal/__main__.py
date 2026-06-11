@@ -22,6 +22,8 @@ def main() -> None:
     if sys.platform == "win32":
         try:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 1)
         except Exception:
             pass
 

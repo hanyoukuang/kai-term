@@ -34,7 +34,8 @@ def _load_bundled_font() -> str | None:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     font_path = os.path.join(current_dir, "assets", "fonts", "JetBrainsMonoNerdFont-Regular.ttf")
     if os.path.exists(font_path):
-        font_id = QFontDatabase.addApplicationFont(font_path)
+        # On Windows, Qt expects forward slashes for font paths.
+        font_id = QFontDatabase.addApplicationFont(font_path.replace("\\", "/"))
         if font_id != -1:
             families = QFontDatabase.applicationFontFamilies(font_id)
             if families:
